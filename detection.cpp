@@ -32,6 +32,16 @@
 
 
 
+class Pixel
+{
+    public:
+        double x; // x value of pixel
+        double y; // y value of pixel
+        double z; // z value of pixel
+        cv::Scalar color; // color of pixel
+};
+
+
 int main() {
 
     // Create black image
