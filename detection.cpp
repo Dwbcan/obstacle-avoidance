@@ -14,15 +14,17 @@
 #include <opencv2/imgcodecs.hpp>
 
 
-#define M_PI                3.141592    // Pi
-#define TO_DEG              (180/M_PI)  // Multiply by this constant to convert radians to degrees
-#define ROVER_WIDTH         600         // Width of rover in mm
-#define MAX_PITCH           25          // Maximum rover pitch angle in degrees
-#define MED_PITCH           15          // Medium pitch angle threshold in degrees
-#define MAX_ROLL            35          // Maximum rover roll angle in degrees
-#define MED_ROLL            25          // Medium roll angle threshold in degrees
+#define M_PI                3.141592      // Pi
+#define TO_DEG              (180/M_PI)    // Multiply by this constant to convert radians to degrees
+#define ROVER_WIDTH         650.0         // Width of rover in mm
+#define HEIGHT              575.0         // LiDAR's height above the ground in mm (distance from ground to bottom of LiDAR)
+#define MAX_PITCH           25.0          // Maximum rover pitch angle in degrees
+#define MED_PITCH           15.0          // Medium pitch angle threshold in degrees
+#define MAX_ROLL            35.0          // Maximum rover roll angle in degrees
+#define MED_ROLL            25.0          // Medium roll angle threshold in degrees
 
-#define Y_MAX_ERROR         100         // Maximum y distance (in mm) between pixel and point on the ground, for pixel to not be outlier
+#define GROUND_SLOPE        (75.0/1356)   // The slope of a perfectly flat ground plane from the LiDAR's POV
+#define Y_MAX_ERROR         50            // Maximum y distance (in mm) between pixel and point on the ground, for pixel to not be outlier
 
 #define BLACK               cv::Scalar(0, 0, 0)         // The color black in OpenCV (in BGR)
 #define GRAY                cv::Scalar(125, 125, 125)   // The color gray in OpenCV (in BGR)
@@ -47,9 +49,11 @@ int main() {
     // Create black image
     cv::Mat img(120, 160, CV_8UC3, BLACK);
 
-
+    // Display final image until user presses any button on the keyboard
     cv::imshow("Image", img);
     cv::waitKey(0);
+    
+    // Output final image to JPG file
     cv::imwrite("C:/Users/Dew Bhaumik/Desktop/obstacle-avoidance/output.jpg", img);
     
     return 0;
