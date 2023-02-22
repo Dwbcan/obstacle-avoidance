@@ -34,6 +34,24 @@
 
 
 
+
+
+/** 
+ * PLugs in the z value of a point on a perfectly flat ground plane into a line equation representing this flat ground from the LiDAR's POV
+ * when mounted a distance HEIGHT above this ground, and returns the point's corresponding y value
+ * 
+ * @param z The z value of a point on a perfectly flat ground plane from LiDAR's POV
+ * @return Corresponding y value of point
+ */   
+double GroundLine(double z)
+{
+    double y;
+    y = GROUND_SLOPE * (z - 231.0) - 25.0 - HEIGHT;  /* Slope-point form line equation where 231.0 is the z1 value and 
+                                                        25.0 is the y1 value (please refer to documentation for detailed explanation) */                                                
+    return y;
+}
+
+
 class Pixel
 {
     public:
