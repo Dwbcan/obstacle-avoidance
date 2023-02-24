@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="16.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\Dew Bhaumik\Desktop\obstacle-avoidance\build\CMakeFiles\06385b3070e42058bb48c52dc29cd452\NightlyMemoryCheck.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\Dew Bhaumik\Desktop\obstacle-avoidance\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="C:\Users\Dew Bhaumik\Desktop\obstacle-avoidance\build\CMakeFiles\NightlyMemoryCheck" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{BAA569E8-BF2B-34E9-A6C3-C434D3022196}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
