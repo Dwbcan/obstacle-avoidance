@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <cmath>
 #include <string>
 #include <algorithm>
@@ -26,18 +27,27 @@
 #define GROUND_SLOPE        (75.0/1356)   // The slope of a perfectly flat ground plane from the LiDAR's POV
 #define Y_MAX_ERROR         50            // Maximum y distance (in mm) between pixel and point on the ground, for pixel to not be outlier
 
-#define BLACK               cv::Scalar(0, 0, 0)         // The color black in OpenCV (in BGR)
-#define GRAY                cv::Scalar(125, 125, 125)   // The color gray in OpenCV (in BGR)
-#define RED                 cv::Scalar(17, 31, 187)     // The color red in OpenCV (in BGR)
-#define YELLOW              cv::Scalar(0, 181, 247)     // The color yellow in OpenCV (in BGR)
+#define BLACK               cv::Vec3b(0, 0, 0)         // The color black in OpenCV (in BGR)
+#define GRAY                cv::Vec3b(125, 125, 125)   // The color gray in OpenCV (in BGR)
+#define RED                 cv::Vec3b(17, 31, 187)     // The color red in OpenCV (in BGR)
+#define YELLOW              cv::Vec3b(0, 181, 247)     // The color yellow in OpenCV (in BGR)
 
 
 
+
+
+class Pixel
+{
+    public:
+        double x; // x value of pixel
+        double y; // y value of pixel
+        double z; // z value of pixel
+};
 
 
 
 /** 
- * PLugs in the z value of a point on a perfectly flat ground plane into a line equation representing this flat ground from the LiDAR's POV
+ * Plugs in the z value of a point on a perfectly flat ground plane into a line equation representing this flat ground from the LiDAR's POV
  * when mounted a distance HEIGHT above this ground, and returns the point's corresponding y value
  * 
  * @param z The z value of a point on a perfectly flat ground plane from LiDAR's POV
@@ -52,20 +62,114 @@ double GroundLine(double z)
 }
 
 
-class Pixel
+
+/** 
+ * Reads in XYZ values of each pixel in point cloud frame from CSV files before performing linear regression on this data
+ * to estimate ground plane and output the slope and y-intercept of the line of best fit representing the straight line path
+ * of the rover on the ground plane (please refer to documentation for detailed explanation)
+ * 
+ * @param x_filename The path to the CSV file containing the x values
+ * @param y_filename The path to the CSV file containing the y values
+ * @param z_filename The path to the CSV file containing the z values
+ * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel point cloud frame
+ * @param slope The outputted slope of the line of best
+ * @param y_intercept The outputted y-intercept of the line of best fit 
+ */ 
+void linearRegression(const std::string &x_filename, const std::string &y_filename, const std::string &z_filename, std::vector<std::vector<Pixel>> &pixels, double &slope, double &y_intercept)
 {
-    public:
-        double x; // x value of pixel
-        double y; // y value of pixel
-        double z; // z value of pixel
-        cv::Scalar color; // color of pixel
-};
+    std::ifstream x_file(x_filename);
+    std::ifstream y_file(y_filename);
+    std::ifstream z_file(z_filename);
+
+    std::string line;
+
+    int lines_to_skip = 17;
+
+    // Skip over lines we don't want to read
+    for(int i = 0; i < lines_to_skip; i++)
+    {
+        std::getline(x_file, line);
+        std::getline(y_file, line);     
+        std::getline(z_file, line);                 
+    }
+
+    char skip;
+
+    for(int row = 0; row < pixels.size(); row++)
+    {
+        int characters_skipped = 0;
+        int semicolon_count = 0;
+        while(semicolon_count < 2)
+        {
+            z_file >> skip;
+
+            characters_skipped++;
+            if(skip == ';')
+            {
+                semicolon_count++;
+            } 
+            
+        }
+        for(int col = 0; col < pixels[row].size(); col++)
+        {
+            char character = ' ';
+            std::string str;
+            while(character != ';')
+            {
+                z_file >> character;
+                str.push_back(character);
+            }
+            pixels[row][col].z = std::stod(str, NULL);
+        }
+        
+        for(int i = 0; i < characters_skipped; i++)
+        {
+            z_file >> skip;
+        }
+    }
+}
+
+
+
+double GroundPlane(double z)
+{
+    return 0;
+}
+
 
 
 int main() {
 
     // Create black image
     cv::Mat img(120, 160, CV_8UC3, BLACK);
+
+    
+    // Initialize 2D vector of Pixel objects
+    std::vector<std::vector<Pixel>> pixels(120, std::vector<Pixel>(160));
+
+   
+   // Initialize variables to store slope and y-intercept outputs of linearRegression() function
+    double slope, y_intercept;
+    
+    linearRegression("x.csv", "y.csv", "z.csv", pixels, slope, y_intercept);
+
+    
+    // Iterate through pixels in original black image, coloring them as appropriate
+    int row = 0;
+    for(std::vector<Pixel> pixel_row : pixels)
+    {
+        int col = 0;
+        for(Pixel pixel : pixel_row)
+        {
+            if(pixel.z != -1)
+            {
+                img.at<cv::Vec3b>(row, col) = RED;
+            }
+            col++;
+        }
+        row++;
+    }
+
 
     // Display final image until user presses any button on the keyboard
     cv::imshow("Image", img);
