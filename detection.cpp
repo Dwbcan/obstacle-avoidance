@@ -23,7 +23,7 @@
 #define MAX_ROLL            35.0          // Maximum rover roll angle in degrees
 #define MED_ROLL            25.0          // Medium roll angle threshold in degrees
 
-#define THETA               -0.694997     // Angle in degrees by which LiDAR reference frame must be rotated to be parallel to ground reference frame
+#define THETA               -0.694997     // Angle in degrees by which LiDAR reference frame must be rotated to be parallel to ground reference frame (please refer to documentation to understand how THETA was determined)
 
 #define BLACK               cv::Vec3b(0, 0, 0)         // The color black in OpenCV (in BGR)
 #define GRAY                cv::Vec3b(125, 125, 125)   // The color gray in OpenCV (in BGR)
@@ -125,6 +125,7 @@ void linearRegression(const std::string &x_filename, const std::string &y_filena
             pixels[row][col].x = std::stod(str_x, NULL);  // Convert x value from string to double
 
             // Read in y values while skipping semicolons
+            // PLEASE NOTE: We multiply the y value by -1 after reading it in because from the LiDAR's point-of-view, the positive y axis points downwards instead of upwards, so we flip the y axis and make "upwards" the positive direction
             while(character_y != ';')
             {
                 y_file >> character_y;
@@ -274,6 +275,7 @@ void readInData(const std::string &x_filename, const std::string &y_filename, co
             pixels[row][col].x = std::stod(str_x, NULL);  // Convert x value from string to double
 
             // Read in y values while skipping semicolons
+            // PLEASE NOTE: We multiply the y value by -1 after reading it in because from the LiDAR's point-of-view, the positive y axis points downwards instead of upwards, so we flip the y axis and make "upwards" the positive direction  
             while(character_y != ';')
             {
                 y_file >> character_y;
@@ -312,8 +314,18 @@ int main() {
     
     // Initialize 2D vector of Pixel objects
     std::vector<std::vector<Pixel>> pixels(120, std::vector<Pixel>(160));
+    
+    
+    // Read in XYZ data
     readInData("x.csv", "y.csv", "z.csv", pixels);
 
+    
+    double x_dist;
+    double y_dist;
+    double z_dist;
+    double pitch_angle;
+    double roll_angle;
+    
 
     // Iterate through pixels in original black image, coloring them as appropriate
     int row = 0;
@@ -322,9 +334,34 @@ int main() {
         int col = 0;
         for(Pixel pixel : pixel_row)
         {
-            if(pixel.z != -1)
-            {
-                img.at<cv::Vec3b>(row, col) = RED;
+            if(pixel.z != -1)  // Checks if pixel has valid depth value
+            {   
+                // Transform pixel's coordinates from LiDAR reference frame to ground reference frame
+                transform(THETA, pixel.y, pixel.z);
+                
+
+                x_dist = abs(pixel.x) + ROVER_WIDTH / 2;  // X distance from pixel to the farthest point on the front wheel that the rover will pivot on when rolling
+                y_dist = abs(pixel.y);  // Y distance from pixel to ground
+                z_dist = pixel.z;  // Z distance from pixel to LiDAR lens
+                
+                // Determine pitch and roll angles
+                pitch_angle = atan2(y_dist, z_dist) * TO_DEG;
+                roll_angle = atan2(y_dist, x_dist) * TO_DEG;
+
+                if(pitch_angle < MED_PITCH && roll_angle < MED_ROLL)
+                {
+                    img.at<cv::Vec3b>(row, col) = GRAY; // Color the pixel gray
+                }
+
+                else if(pitch_angle > MAX_PITCH || roll_angle > MAX_ROLL)
+                {
+                    img.at<cv::Vec3b>(row, col) = RED; // Color the pixel red
+                }
+
+                else if((pitch_angle > MED_PITCH && pitch_angle < MAX_PITCH) || (roll_angle > MED_ROLL && roll_angle < MAX_ROLL))
+                {
+                    img.at<cv::Vec3b>(row, col) = YELLOW; // Color the pixel yellow
+                }
             }
             col++;
         }
