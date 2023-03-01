@@ -23,7 +23,7 @@
 #define MAX_ROLL            35.0          // Maximum rover roll angle in degrees
 #define MED_ROLL            25.0          // Medium roll angle threshold in degrees
 
-#define THETA               -0.694997     // The slope of a perfectly flat ground plane from the LiDAR's POV
+#define THETA               -0.694997     // Angle in degrees by which LiDAR reference frame must be rotated to be parallel to ground reference frame
 
 #define BLACK               cv::Vec3b(0, 0, 0)         // The color black in OpenCV (in BGR)
 #define GRAY                cv::Vec3b(125, 125, 125)   // The color gray in OpenCV (in BGR)
@@ -203,6 +203,107 @@ void transform(const double &angle_degrees, double& y, double& z)
 
 
 
+
+/** 
+ * Reads in XYZ values of each pixel in point cloud frame from CSV files into a 2D vector of Pixel objects
+ * 
+ * @param x_filename The path to the CSV file containing the x values
+ * @param y_filename The path to the CSV file containing the y values
+ * @param z_filename The path to the CSV file containing the z values
+ * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel point cloud frame
+ */ 
+void readInData(const std::string &x_filename, const std::string &y_filename, const std::string &z_filename, std::vector<std::vector<Pixel>> &pixels)
+{
+    // Read in CSV files
+    std::ifstream x_file(x_filename);
+    std::ifstream y_file(y_filename);
+    std::ifstream z_file(z_filename);
+
+    std::string line;
+
+    int lines_to_skip = 17;
+
+    // Skip over lines we don't want to read
+    for(int i = 0; i < lines_to_skip; i++)
+    {
+        std::getline(x_file, line);
+        std::getline(y_file, line);     
+        std::getline(z_file, line);                 
+    }
+
+    char skip;
+
+    // Iterate through each row in CSV files
+    for(int row = 0; row < pixels.size(); row++)
+    {
+        int characters_skipped = 0;
+        int semicolon_count = 0;
+        
+        // Skip over first three characters of each row of each file
+        while(semicolon_count < 2)
+        {
+            x_file >> skip;
+            y_file >> skip;
+            z_file >> skip;
+            characters_skipped++;
+            
+            if(skip == ';')
+            {
+                semicolon_count++;
+            } 
+            
+        }
+
+        // Iterate through each column in CSV files
+        for(int col = 0; col < pixels[row].size(); col++)
+        {
+            char character_x = ' ';
+            char character_y = ' ';
+            char character_z = ' ';
+            
+            std::string str_x;
+            std::string str_y;
+            std::string str_z;
+            
+            // Read in x values while skipping semicolons 
+            while(character_x != ';')
+            {
+                x_file >> character_x;
+                str_x.push_back(character_x);
+            }
+            pixels[row][col].x = std::stod(str_x, NULL);  // Convert x value from string to double
+
+            // Read in y values while skipping semicolons
+            while(character_y != ';')
+            {
+                y_file >> character_y;
+                str_y.push_back(character_y);
+            }
+            pixels[row][col].y = std::stod(str_y, NULL) * -1;  // Convert y value from string to double
+
+            // Read in z values while skipping semicolons
+            while(character_z != ';')
+            {
+                z_file >> character_z;
+                str_z.push_back(character_z);
+            }
+            pixels[row][col].z = std::stod(str_z, NULL);  // Convert z value from string to double
+        }
+        
+        // Skip over last three characters of each row of each file
+        for(int i = 0; i < characters_skipped; i++)
+        {
+            x_file >> skip;
+            y_file >> skip;
+            z_file >> skip;
+        }
+    }
+}
+
+
+
+
+
 int main() {
 
     // Create black image
@@ -211,27 +312,24 @@ int main() {
     
     // Initialize 2D vector of Pixel objects
     std::vector<std::vector<Pixel>> pixels(120, std::vector<Pixel>(160));
+    readInData("x.csv", "y.csv", "z.csv", pixels);
 
-   
-   // Initialize variables to store slope and y-intercept outputs of linearRegression() function
-    double slope, y_intercept;
-    
-    
-    // // Iterate through pixels in original black image, coloring them as appropriate
-    // int row = 0;
-    // for(std::vector<Pixel> pixel_row : pixels)
-    // {
-    //     int col = 0;
-    //     for(Pixel pixel : pixel_row)
-    //     {
-    //         if(pixel.z != -1)
-    //         {
-    //             img.at<cv::Vec3b>(row, col) = RED;
-    //         }
-    //         col++;
-    //     }
-    //     row++;
-    // }
+
+    // Iterate through pixels in original black image, coloring them as appropriate
+    int row = 0;
+    for(std::vector<Pixel> pixel_row : pixels)
+    {
+        int col = 0;
+        for(Pixel pixel : pixel_row)
+        {
+            if(pixel.z != -1)
+            {
+                img.at<cv::Vec3b>(row, col) = RED;
+            }
+            col++;
+        }
+        row++;
+    }
 
     
     // Output final image to JPG file
