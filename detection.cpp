@@ -17,13 +17,15 @@
 #define TO_DEG              (180/M_PI)    // Multiply by this constant to convert radians to degrees
 #define TO_RAD              (M_PI/180)    // Multiply by this constant to convert degrees to radians
 #define ROVER_WIDTH         680.0         // Width of rover in mm
-#define HEIGHT              635.0         // LiDAR's height above the ground in mm (distance from ground to LiDAR lens)
+#define HEIGHT              730.0         // LiDAR's height above the ground in mm (distance from ground to LiDAR lens)
 #define MAX_PITCH           25.0          // Maximum rover pitch angle in degrees
 #define MED_PITCH           15.0          // Medium pitch angle threshold in degrees
 #define MAX_ROLL            35.0          // Maximum rover roll angle in degrees
 #define MED_ROLL            25.0          // Medium roll angle threshold in degrees
+#define Y_MAX_GROUND        40.0          // Maximum absolute value y distance (in mm) from ground to pixel after transform() function has been called on pixel, for pixel to be considered ground 
 
-#define THETA               -0.694997     // Angle in degrees by which LiDAR reference frame must be rotated to be parallel to ground reference frame (please refer to documentation to understand how THETA was determined)
+#define THETA               1.4521        // Angle in degrees by which ground reference frame must be rotated to be parallel with LiDAR reference frame (please refer to documentation to understand how THETA was determined)
+#define PHI                 (90 - THETA)  // Please refer to documentation for explanation
 
 #define BLACK               cv::Vec3b(0, 0, 0)         // The color black in OpenCV (in BGR)
 #define GRAY                cv::Vec3b(125, 125, 125)   // The color gray in OpenCV (in BGR)
@@ -50,9 +52,9 @@ class Pixel
  * Reads in XYZ values of each pixel in point cloud frame from CSV files before performing linear regression on this data
  * to estimate ground plane and output the slope and y-intercept of a line on the ground plane (please refer to documentation for detailed explanation)
  * 
- * @param x_filename The path to the CSV file containing the x values
- * @param y_filename The path to the CSV file containing the y values
- * @param z_filename The path to the CSV file containing the z values
+ * @param x_filename The absolute path to the CSV file containing the x values
+ * @param y_filename The absolute path to the CSV file containing the y values
+ * @param z_filename The absolute path to the CSV file containing the z values
  * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel point cloud frame
  * @param slope The outputted slope of the line of best
  * @param y_intercept The outputted y-intercept of the line of best fit 
@@ -177,7 +179,7 @@ void linearRegression(const std::string &x_filename, const std::string &y_filena
 
 
 /** 
- * Rotates a pixel about the x-axis before translating it downwards by the vertical height of the LiDAR lens from the ground
+ * Transforms pixel from ground reference frame to LiDAR reference frame
  * 
  * @param angle_degrees Angle in degrees that pixel will be rotated by
  * @param y Y value of pixel
@@ -185,19 +187,21 @@ void linearRegression(const std::string &x_filename, const std::string &y_filena
  */ 
 void transform(const double &angle_degrees, double& y, double& z)
 {
-    double angle_radians = angle_degrees * TO_RAD; // convert to radians
+    double angle_radians = angle_degrees * TO_RAD; // Convert to radians
     
+    z += HEIGHT * cos(PHI * TO_RAD);  // Translate pixel in z direction (please refer to documentation for detailed explanation)
+    y += HEIGHT * sin(PHI * TO_RAD);  // Translate pixel in y direction (please refer to documentation for detailed explanation)
+
     // Rotate pixel about the x axis
     double cos_theta = cos(angle_radians);
     double sin_theta = sin(angle_radians);
     double y_new = y * cos_theta + z * sin_theta;
     double z_new = z * cos_theta - y * sin_theta;
     
-    // Vertically translate the pixel downwards by the height of the LiDAR from the ground
-    y_new -= HEIGHT;
-
     y = y_new;
     z = z_new;
+
+    z = 100; // Bring pixel closer, such that it is 100 mm away (to get a better slope estimate of the pixel with reference to a point on the ground 100 mm in front of it)
 }
 
 
@@ -208,9 +212,9 @@ void transform(const double &angle_degrees, double& y, double& z)
 /** 
  * Reads in XYZ values of each pixel in point cloud frame from CSV files into a 2D vector of Pixel objects
  * 
- * @param x_filename The path to the CSV file containing the x values
- * @param y_filename The path to the CSV file containing the y values
- * @param z_filename The path to the CSV file containing the z values
+ * @param x_filename The absolute path to the CSV file containing the x values
+ * @param y_filename The absolute path to the CSV file containing the y values
+ * @param z_filename The absolute path to the CSV file containing the z values
  * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel point cloud frame
  */ 
 void readInData(const std::string &x_filename, const std::string &y_filename, const std::string &z_filename, std::vector<std::vector<Pixel>> &pixels)
@@ -317,9 +321,9 @@ int main() {
     
     
     // Read in XYZ data
-    readInData("x.csv", "y.csv", "z.csv", pixels);
+    readInData("C:/Users/Dew Bhaumik/Desktop/obstacle-avoidance/x.csv", "C:/Users/Dew Bhaumik/Desktop/obstacle-avoidance/y.csv", "C:/Users/Dew Bhaumik/Desktop/obstacle-avoidance/z.csv", pixels);
 
-    
+
     double x_dist;
     double y_dist;
     double z_dist;
@@ -336,19 +340,18 @@ int main() {
         {
             if(pixel.z != -1)  // Checks if pixel has valid depth value
             {   
-                // Transform pixel's coordinates from LiDAR reference frame to ground reference frame
+                // Transform pixel's coordinates from ground reference frame to LiDAR reference frame
                 transform(THETA, pixel.y, pixel.z);
-                
-
+                    
                 x_dist = abs(pixel.x) + ROVER_WIDTH / 2;  // X distance from pixel to the farthest point on the front wheel that the rover will pivot on when rolling
                 y_dist = abs(pixel.y);  // Y distance from pixel to ground
                 z_dist = pixel.z;  // Z distance from pixel to LiDAR lens
-                
+
                 // Determine pitch and roll angles
                 pitch_angle = atan2(y_dist, z_dist) * TO_DEG;
                 roll_angle = atan2(y_dist, x_dist) * TO_DEG;
 
-                if(pitch_angle < MED_PITCH && roll_angle < MED_ROLL)
+                if(y_dist <= Y_MAX_GROUND)
                 {
                     img.at<cv::Vec3b>(row, col) = GRAY; // Color the pixel gray
                 }
@@ -358,7 +361,7 @@ int main() {
                     img.at<cv::Vec3b>(row, col) = RED; // Color the pixel red
                 }
 
-                else if((pitch_angle > MED_PITCH && pitch_angle < MAX_PITCH) || (roll_angle > MED_ROLL && roll_angle < MAX_ROLL))
+                else if((pitch_angle > MED_PITCH && pitch_angle <= MAX_PITCH) || (roll_angle > MED_ROLL && roll_angle <= MAX_ROLL))
                 {
                     img.at<cv::Vec3b>(row, col) = YELLOW; // Color the pixel yellow
                 }
