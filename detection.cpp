@@ -19,10 +19,9 @@
 #define ROVER_WIDTH         680.0         // Width of rover in mm
 #define HEIGHT              730.0         // LiDAR's height above the ground in mm (distance from ground to LiDAR lens)
 #define MAX_PITCH           25.0          // Maximum rover pitch angle in degrees
-#define MED_PITCH           15.0          // Medium pitch angle threshold in degrees
 #define MAX_ROLL            35.0          // Maximum rover roll angle in degrees
-#define MED_ROLL            25.0          // Medium roll angle threshold in degrees
-#define Y_MAX_GROUND        40.0          // Maximum absolute value y distance (in mm) from ground to pixel after transform() function has been called on pixel, for pixel to be considered ground 
+#define GROUND              100.0         // Maximum absolute value y distance (in mm) from ground to pixel after transform() function has been called on pixel, for pixel to be considered ground 
+#define SAFE                150.0         // Maximum absolute value y distance (in mm) for pixel to be considered safe/traversible without worry (e.g. not-worrisome rock/obstacle)
 
 #define THETA               1.4521        // Angle in degrees by which ground reference frame must be rotated to be parallel with LiDAR reference frame (please refer to documentation to understand how THETA was determined)
 #define PHI                 (90 - THETA)  // Please refer to documentation for explanation
@@ -31,6 +30,7 @@
 #define GRAY                cv::Vec3b(125, 125, 125)   // The color gray in OpenCV (in BGR)
 #define RED                 cv::Vec3b(17, 31, 187)     // The color red in OpenCV (in BGR)
 #define YELLOW              cv::Vec3b(0, 181, 247)     // The color yellow in OpenCV (in BGR)
+#define GREEN               cv::Vec3b(49, 164, 50)     // The color green in OpenCV (in BGR)
 
 
 
@@ -200,8 +200,6 @@ void transform(const double &angle_degrees, double& y, double& z)
     
     y = y_new;
     z = z_new;
-
-    z = 100; // Bring pixel closer, such that it is 100 mm away (to get a better slope estimate of the pixel with reference to a point on the ground 100 mm in front of it)
 }
 
 
@@ -321,7 +319,7 @@ int main() {
     
     
     // Read in XYZ data
-    readInData("C:/Users/Dew Bhaumik/Desktop/obstacle-avoidance/x.csv", "C:/Users/Dew Bhaumik/Desktop/obstacle-avoidance/y.csv", "C:/Users/Dew Bhaumik/Desktop/obstacle-avoidance/z.csv", pixels);
+    readInData("absolute-path-to-x-values-file.csv", "absolute-path-to-y-values-file.csv", "absolute-path-to-z-values-file.csv", pixels);
 
 
     double x_dist;
@@ -342,26 +340,55 @@ int main() {
             {   
                 // Transform pixel's coordinates from ground reference frame to LiDAR reference frame
                 transform(THETA, pixel.y, pixel.z);
-                    
+                
+                if(abs(pixel.y) <= GROUND)
+                {
+                    img.at<cv::Vec3b>(row, col) = GRAY; // Color the pixel gray
+                    col++;
+                    continue;
+                }
+                
+                else if(abs(pixel.y) <= SAFE)
+                {
+                    img.at<cv::Vec3b>(row, col) = GREEN; // Color the pixel green
+                    col++;
+                    continue;
+                }
+
+                // Initialize ground_pixel object 
+                Pixel ground_pixel;
+                ground_pixel.x = 0;
+                ground_pixel.y = 0;
+                ground_pixel.z = 0;
+                
+                // Find the closest pixel on the ground (that has a valid depth value) that is in the same column (of the LiDAR image) as the original pixel, and store its XYZ values in the ground_pixel object
+                int next_row = row + 1;
+                while(next_row < 120 && pixels[next_row][col].z != -1)  // Keep searching for this ground pixel until last possible row has been iterated through or a pixel of invalid depth is found  
+                {
+                    ground_pixel = pixels[next_row][col];
+                    transform(THETA, ground_pixel.y, ground_pixel.z);
+                    if(abs(ground_pixel.y) <= GROUND)
+                    {
+                        break;
+                    }
+                    next_row++;
+                }
+
+
                 x_dist = abs(pixel.x) + ROVER_WIDTH / 2;  // X distance from pixel to the farthest point on the front wheel that the rover will pivot on when rolling
-                y_dist = abs(pixel.y);  // Y distance from pixel to ground
-                z_dist = pixel.z;  // Z distance from pixel to LiDAR lens
+                y_dist = abs(pixel.y - ground_pixel.y);  // Y distance from pixel to ground_pixel (the closest pixel on the ground that's in the same column)
+                z_dist = abs(pixel.z - ground_pixel.z);  // Z distance from pixel to ground_pixel (the closest pixel on the ground that's in the same column)
 
                 // Determine pitch and roll angles
                 pitch_angle = atan2(y_dist, z_dist) * TO_DEG;
                 roll_angle = atan2(y_dist, x_dist) * TO_DEG;
 
-                if(y_dist <= Y_MAX_GROUND)
-                {
-                    img.at<cv::Vec3b>(row, col) = GRAY; // Color the pixel gray
-                }
-
-                else if(pitch_angle > MAX_PITCH || roll_angle > MAX_ROLL)
+                
+                if(pitch_angle > MAX_PITCH || roll_angle > MAX_ROLL)
                 {
                     img.at<cv::Vec3b>(row, col) = RED; // Color the pixel red
                 }
-
-                else if((pitch_angle > MED_PITCH && pitch_angle <= MAX_PITCH) || (roll_angle > MED_ROLL && roll_angle <= MAX_ROLL))
+                else
                 {
                     img.at<cv::Vec3b>(row, col) = YELLOW; // Color the pixel yellow
                 }
