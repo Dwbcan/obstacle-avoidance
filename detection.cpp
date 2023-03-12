@@ -21,7 +21,7 @@
 #define MAX_PITCH           25.0          // Maximum rover pitch angle in degrees
 #define MAX_ROLL            35.0          // Maximum rover roll angle in degrees
 #define GROUND              100.0         // Maximum absolute value y distance (in mm) from ground to pixel after transform() function has been called on pixel, for pixel to be considered ground 
-#define SAFE                150.0         // Maximum absolute value y distance (in mm) for pixel to be considered safe/traversible without worry (e.g. not-worrisome rock/obstacle)
+#define SAFE                150.0         // Maximum height above ground (in mm) for pixel to be considered safe/traversible without worry (e.g. not-worrisome rock/obstacle)
 
 #define LIDAR_ANGLE         0.0                        // LiDAR's angle of inclination (relative to horizon) in degrees, where negative means tilted downwards and positive means tilted upwards
 #define OMEGA               1.4521                     // Ground plane's angle of inclination (in degrees) as it appears in LiDAR image when LiDAR is upright (has 0 angle of inclination). Refer to documentation for more info
@@ -33,6 +33,7 @@
 #define RED                 cv::Vec3b(17, 31, 187)     // The color red in OpenCV (in BGR)
 #define YELLOW              cv::Vec3b(0, 181, 247)     // The color yellow in OpenCV (in BGR)
 #define GREEN               cv::Vec3b(49, 164, 50)     // The color green in OpenCV (in BGR)
+#define BLUE                cv::Vec3b(128, 0, 0)       // The color navy blue in OpenCV (in BGR)
 
 
 
@@ -208,7 +209,6 @@ void transform(const double &angle_degrees, double& y, double& z)
 
 
 
-
 /** 
  * Reads in XYZ values of each pixel in point cloud frame from CSV files into a 2D vector of Pixel objects
  * 
@@ -310,6 +310,69 @@ void readInData(const std::string &x_filename, const std::string &y_filename, co
 
 
 
+/** 
+ * Takes in image and colors all pixels with invalid depth values that could represent ditches blue
+ * 
+ * @param img Image to perform ditch detection on 
+ * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel point cloud frame
+ */ 
+void detectDitch(cv::Mat &img, std::vector<std::vector<Pixel>> &pixels)
+{
+    bool found_ground = false;  // Flag variable used to break the while loops when a pixel on the ground is found
+    
+    // Initialize temporary Pixel object to store XYZ values of pixels in 2D vector
+    Pixel pixel;
+
+    // Loop through every pixel in image until a pixel on the ground is found
+    int row = 0;
+    while(row < 120)
+    {
+        int col = 0;
+        while(col < 160)
+        {   
+            if(pixels[row][col].z != -1)  // Check pixel's depth value so we can skip pixels with invalid depth values
+            {
+                pixel = pixels[row][col];
+                transform(THETA, pixel.y, pixel.z);  // Transform the pixel from the ground's reference frame to the LiDAR's reference frame if it has a valid depth value
+                
+                // Break inner while loop if a pixel on the ground is found
+                if(abs(pixel.y) <= GROUND)
+                {
+                    found_ground = true;
+                    break;
+                }
+            }
+            col++;
+        }
+
+        // Break outer while loop if a pixel on the ground is found
+        if(found_ground)
+        {
+            break;
+        }
+        row++;
+    }
+    
+    // Starting from the row of the first pixel on the ground that was found, loop through rest of image coloring every pixel with invalid depth blue to represent ditches 
+    if(found_ground)
+    {
+        for(int i = row; i < 120; i++)
+        {
+            for(int j = 0; j < 160; j++)
+            {
+                if(pixels[i][j].z == -1)
+                {
+                    img.at<cv::Vec3b>(i, j) = BLUE;  // Color the pixel blue
+                }
+            }
+        }
+    }
+}
+
+
+
+
+
 int main() {
 
     // Create black image
@@ -345,14 +408,14 @@ int main() {
                 
                 if(abs(pixel.y) <= GROUND)
                 {
-                    img.at<cv::Vec3b>(row, col) = GRAY; // Color the pixel gray
+                    img.at<cv::Vec3b>(row, col) = GRAY;  // Color the pixel gray
                     col++;
                     continue;
                 }
                 
-                else if(abs(pixel.y) <= SAFE)
+                else if(pixel.y > 0 && pixel.y <= SAFE)
                 {
-                    img.at<cv::Vec3b>(row, col) = GREEN; // Color the pixel green
+                    img.at<cv::Vec3b>(row, col) = GREEN;  // Color the pixel green
                     col++;
                     continue;
                 }
@@ -363,7 +426,7 @@ int main() {
                 ground_pixel.y = 0;
                 ground_pixel.z = 0;
                 
-                // Find the closest pixel on the ground (that has a valid depth value) that is in the same column (of the LiDAR image) as the original pixel, and store its XYZ values in the ground_pixel object
+                // Find the closest pixel on the ground (with a valid depth value) that is in the same column (of the LiDAR image) as the original pixel, and store its XYZ values in the ground_pixel object
                 int next_row = row + 1;
                 while(next_row < 120 && pixels[next_row][col].z != -1)  // Keep searching for this ground pixel until last possible row has been iterated through or a pixel of invalid depth is found  
                 {
@@ -385,14 +448,14 @@ int main() {
                 pitch_angle = atan2(y_dist, z_dist) * TO_DEG;
                 roll_angle = atan2(y_dist, x_dist) * TO_DEG;
 
-                
+
                 if(pitch_angle > MAX_PITCH || roll_angle > MAX_ROLL)
                 {
-                    img.at<cv::Vec3b>(row, col) = RED; // Color the pixel red
+                    img.at<cv::Vec3b>(row, col) = RED;  // Color the pixel red
                 }
                 else
                 {
-                    img.at<cv::Vec3b>(row, col) = YELLOW; // Color the pixel yellow
+                    img.at<cv::Vec3b>(row, col) = YELLOW;  // Color the pixel yellow
                 }
             }
             col++;
@@ -400,7 +463,11 @@ int main() {
         row++;
     }
 
-    
+
+    // Detect ditches in image
+    detectDitch(img, pixels);
+
+
     // Output final image to JPG file
     cv::imwrite("C:/Users/Dew Bhaumik/Desktop/obstacle-avoidance/output.jpg", img);
     
