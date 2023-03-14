@@ -406,6 +406,7 @@ int main() {
                 // Transform pixel's coordinates from ground reference frame to LiDAR reference frame
                 transform(THETA, pixel.y, pixel.z);
                 
+                // Color the pixel gray if it's on the ground
                 if(abs(pixel.y) <= GROUND)
                 {
                     img.at<cv::Vec3b>(row, col) = GRAY;  // Color the pixel gray
@@ -413,6 +414,7 @@ int main() {
                     continue;
                 }
                 
+                // Color the pixel green if it has a safe/traversible height
                 else if(pixel.y > 0 && pixel.y <= SAFE)
                 {
                     img.at<cv::Vec3b>(row, col) = GREEN;  // Color the pixel green
@@ -449,10 +451,23 @@ int main() {
                 roll_angle = atan2(y_dist, x_dist) * TO_DEG;
 
 
+                // If the pixel has too high of a pitch or roll angle, color it blue (if it lies below the ground) or red (if it lies above the ground)
                 if(pitch_angle > MAX_PITCH || roll_angle > MAX_ROLL)
                 {
-                    img.at<cv::Vec3b>(row, col) = RED;  // Color the pixel red
+                    // Color the pixel blue if it's below the ground
+                    if(pixel.y < 0)
+                    {
+                        img.at<cv::Vec3b>(row, col) = BLUE;  // Color the pixel blue (to represent ditch)
+                    }
+
+                    // Color the pixel red if it's above the ground
+                    else
+                    {
+                        img.at<cv::Vec3b>(row, col) = RED;  // Color the pixel red
+                    }
                 }
+
+                // Else color the pixel yellow to represent a warning zone or slope that should be driven over with caution
                 else
                 {
                     img.at<cv::Vec3b>(row, col) = YELLOW;  // Color the pixel yellow
