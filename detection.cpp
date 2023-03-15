@@ -17,6 +17,7 @@
 #define TO_DEG              (180/M_PI)    // Multiply by this constant to convert radians to degrees
 #define TO_RAD              (M_PI/180)    // Multiply by this constant to convert degrees to radians
 #define ROVER_WIDTH         680.0         // Width of rover in mm
+#define WHEEL_RAD           150.0         // Wheel radius in mm
 #define HEIGHT              730.0         // LiDAR's height above the ground in mm (distance from ground to LiDAR lens)
 #define MAX_PITCH           25.0          // Maximum rover pitch angle in degrees
 #define MAX_ROLL            35.0          // Maximum rover roll angle in degrees
@@ -311,7 +312,7 @@ void readInData(const std::string &x_filename, const std::string &y_filename, co
 
 
 /** 
- * Takes in image and colors all pixels with invalid depth values that could represent ditches blue
+ * Takes in image and colors all pixels that could represent ditches blue
  * 
  * @param img Image to perform ditch detection on 
  * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel point cloud frame
@@ -353,17 +354,47 @@ void detectDitch(cv::Mat &img, std::vector<std::vector<Pixel>> &pixels)
         row++;
     }
     
-    // Starting from the row of the first pixel on the ground that was found, loop through rest of image coloring every pixel with invalid depth blue to represent ditches 
+    // Starting from the row of the first pixel on the ground that was found, loop through rest of image coloring every pixel that could represent a ditch blue 
     if(found_ground)
     {
-        for(int i = row; i < 120; i++)
+        Pixel curr_pixel;
+        Pixel next_pixel;
+        double distance = 0;  // Z distance between curr_pixel and next_pixel
+        
+        // Loop through each column in LiDAR image
+        for(int column = 0; column < 160; column++)
         {
-            for(int j = 0; j < 160; j++)
+            // Loop through each row (starting from the row of the first pixel on the ground that was found)
+            int curr_row = row;
+            while(curr_row < 119)
             {
-                if(pixels[i][j].z == -1)
+                // Color the pixel in the current row blue if it has an invalid depth
+                if(pixels[curr_row][column].z == -1)
                 {
-                    img.at<cv::Vec3b>(i, j) = BLUE;  // Color the pixel blue
+                    img.at<cv::Vec3b>(curr_row, column) = BLUE;  // Color the pixel blue
                 }
+                
+                else
+                {
+                    curr_pixel = pixels[curr_row][column];
+                    transform(THETA, curr_pixel.y, curr_pixel.z);  // Transform curr_pixel from ground's reference frame to LiDAR's reference frame
+
+                    next_pixel = pixels[curr_row + 1][column];
+                    transform(THETA, next_pixel.y, next_pixel.z);  // Transform next_pixel from ground's reference frame to LiDAR's reference frame
+
+                    distance = abs(curr_pixel.z - next_pixel.z);  // Calculate z distance between both pixels
+
+                    // Color curr_pixel, next_pixel, and a few surrounding pixels in the same column blue if there is an unsafe distance between curr_pixel and next_pixel (the distance is unsafe if it's greater than the wheel's radius)
+                    if(distance > WHEEL_RAD)
+                    {
+                        img.at<cv::Vec3b>(curr_row, column) = BLUE;  // Color the current pixel blue
+                        img.at<cv::Vec3b>(curr_row + 1, column) = BLUE;  // Color the pixel in the next row blue
+
+                        img.at<cv::Vec3b>(curr_row - 1, column) = BLUE;  // Color the pixel in the row above blue
+                        img.at<cv::Vec3b>(curr_row - 2, column) = BLUE;  // Color the pixel in the row two rows above blue
+                    }
+                }
+                curr_row++;
             }
         }
     }
@@ -458,6 +489,7 @@ int main() {
                     if(pixel.y < 0)
                     {
                         img.at<cv::Vec3b>(row, col) = BLUE;  // Color the pixel blue (to represent ditch)
+                        pixels[row][col].z = -1;  // This is done to classify the pixel as a ditch so its pitch and roll angles don't need to be recalculated when detectDitch() is called later
                     }
 
                     // Color the pixel red if it's above the ground
