@@ -25,7 +25,7 @@
 #define SAFE                150.0         // Maximum height above ground (in mm) for pixel to be considered safe/traversible without worry (e.g. not-worrisome rock/obstacle)
 
 #define LIDAR_ANGLE         0.0                        // LiDAR's angle of inclination (relative to horizon) in degrees, where negative means tilted downwards and positive means tilted upwards
-#define OMEGA               1.4521                     // Ground plane's angle of inclination (in degrees) as it appears in LiDAR image when LiDAR is upright (has 0 angle of inclination). Refer to documentation for more info
+#define OMEGA               3.9669                     // Ground plane's angle of inclination (in degrees) as it appears in LiDAR image when LiDAR is upright (has 0 angle of inclination). Refer to documentation for more info
 #define THETA               (OMEGA + LIDAR_ANGLE)      // Angle in degrees by which ground reference frame must be rotated to be parallel with LiDAR reference frame (refer to documentation to understand how THETA was determined)
 #define PHI                 (90 - THETA)               // Please refer to documentation for explanation
 
