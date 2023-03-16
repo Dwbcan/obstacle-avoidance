@@ -317,7 +317,7 @@ void readInData(const std::string &x_filename, const std::string &y_filename, co
  * @param img Image to perform ditch detection on 
  * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel point cloud frame
  */ 
-void detectDitch(cv::Mat &img, std::vector<std::vector<Pixel>> &pixels)
+void detectDitch(cv::Mat &img, const std::vector<std::vector<Pixel>> &pixels)
 {
     bool found_ground = false;  // Flag variable used to break the while loops when a pixel on the ground is found
     
@@ -374,7 +374,8 @@ void detectDitch(cv::Mat &img, std::vector<std::vector<Pixel>> &pixels)
                     img.at<cv::Vec3b>(curr_row, column) = BLUE;  // Color the pixel blue
                 }
                 
-                else
+                // If the current pixel and the pixel in the next row both have valid depth values, determine if there is a ditch based on the z distance between these pixels
+                else if(pixels[curr_row + 1][column].z != -1)
                 {
                     curr_pixel = pixels[curr_row][column];
                     transform(THETA, curr_pixel.y, curr_pixel.z);  // Transform curr_pixel from ground's reference frame to LiDAR's reference frame
