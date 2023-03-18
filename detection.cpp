@@ -312,20 +312,47 @@ void readInData(const std::string &x_filename, const std::string &y_filename, co
 
 
 /** 
- * Takes in image and colors all pixels that could represent ditches blue
+ * Takes in image and colors all pixels that could represent ditches or gaps in depth value between two objects blue
  * 
  * @param img Image to perform ditch detection on 
  * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel point cloud frame
  */ 
 void detectDitch(cv::Mat &img, const std::vector<std::vector<Pixel>> &pixels)
 {
+    bool found_pixel = false;  // Flag variable used to break the while loops when a pixel with a valid depth value is found
+
+    // Loop through every pixel in the image until a pixel with a valid depth value is found
+    int row = 0;
+    while(row < 120)
+    {
+        int col = 0;
+        while(col < 160)
+        {
+            // Break inner while loop if a pixel with a valid depth value is found
+            if(pixels[row][col].z != -1)
+            {
+                found_pixel = true;
+                break;
+            }
+            col++;
+        }
+
+        // Break outer while loop if a pixel with a valid depth value is found
+        if(found_pixel)
+        {
+            break;
+        }
+        row++;
+    }
+
+    int found_pixel_row = row;  // Store the row number of the first pixel with a valid depth value that was found
+
     bool found_ground = false;  // Flag variable used to break the while loops when a pixel on the ground is found
     
-    // Initialize temporary Pixel object to store XYZ values of pixels in 2D vector
+    // Initialize temporary Pixel object which will be used to transform pixel from ground's reference frame to LiDAR's reference frame
     Pixel pixel;
 
-    // Loop through every pixel in image until a pixel on the ground is found
-    int row = 0;
+    // Loop through every pixel in the rest of the image until a pixel on the ground is found
     while(row < 120)
     {
         int col = 0;
@@ -353,49 +380,68 @@ void detectDitch(cv::Mat &img, const std::vector<std::vector<Pixel>> &pixels)
         }
         row++;
     }
+
+    int found_ground_row = row;  // Store the row number of the first pixel on the ground that was found
     
-    // Starting from the row of the first pixel on the ground that was found, loop through rest of image coloring every pixel that could represent a ditch blue 
-    if(found_ground)
+    // Starting from the row of the first pixel with a valid depth value that was found, loop through rest of image coloring every pixel that could represent a ditch or gap in depth value between two objects blue
+    if(found_pixel && found_ground)
     {
-        Pixel curr_pixel;
-        Pixel next_pixel;
-        double distance = 0;  // Z distance between curr_pixel and next_pixel
+        Pixel curr_pixel;  // The pixel in the current row and column
+        Pixel pixel_above;  // The pixel directly above curr_pixel
+        Pixel pixel_to_right;  // The pixel directly to the right of curr_pixel
+        
+        double distance = 0;  // Variable used to store z distance between pixels
         
         // Loop through each column in LiDAR image
-        for(int column = 0; column < 160; column++)
+        for(int column = 0; column < 159; column++)
         {
-            // Loop through each row (starting from the row of the first pixel on the ground that was found)
-            int curr_row = row;
-            while(curr_row < 119)
+            // Loop through each row (starting from the row of the first pixel with a valid depth value that was found)
+            for(int curr_row = found_pixel_row; curr_row < 119; curr_row++)
             {
-                // Color the pixel in the current row blue if it has an invalid depth
-                if(pixels[curr_row][column].z == -1)
+                // If the pixel in the current row is on the ground and has an invalid depth value, color the pixel blue
+                if(curr_row >= found_ground_row && pixels[curr_row][column].z == -1)
                 {
                     img.at<cv::Vec3b>(curr_row, column) = BLUE;  // Color the pixel blue
+                    continue;
                 }
                 
-                // If the current pixel and the pixel in the next row both have valid depth values, determine if there is a ditch based on the z distance between these pixels
-                else if(pixels[curr_row + 1][column].z != -1)
+                // If the current pixel and the pixel in the row above both have valid depth values, determine if there is a ditch or gap in depth value based on the z distance between these pixels
+                if(pixels[curr_row][column].z != -1 && pixels[curr_row - 1][column].z != -1)
+                {
+                    curr_pixel = pixels[curr_row][column];
+                    transform(THETA, curr_pixel.y, curr_pixel.z);  // Transform curr_pixel from ground's reference frame to LiDAR's reference frame
+                    
+                    pixel_above = pixels[curr_row - 1][column];
+                    transform(THETA, pixel_above.y, pixel_above.z);  // Transform pixel_above from ground's reference frame to LiDAR's reference frame
+                    
+                    distance = abs(curr_pixel.z - pixel_above.z);
+
+                    // Color the current pixel blue if there's an unsafe z distance between it and the pixel above (the distance is unsafe if it's greater than the wheel's radius)
+                    if(distance > WHEEL_RAD)
+                    {
+                        img.at<cv::Vec3b>(curr_row, column) = BLUE;  // Color the pixel blue
+                        continue;
+                    }
+                }
+                
+                // If the current pixel and the pixel in the column to the right both have valid depth values, determine if there is a ditch or gap in depth value based on the z distance between these pixels
+                if(pixels[curr_row][column].z != -1 && pixels[curr_row][column + 1].z != -1)
                 {
                     curr_pixel = pixels[curr_row][column];
                     transform(THETA, curr_pixel.y, curr_pixel.z);  // Transform curr_pixel from ground's reference frame to LiDAR's reference frame
 
-                    next_pixel = pixels[curr_row + 1][column];
-                    transform(THETA, next_pixel.y, next_pixel.z);  // Transform next_pixel from ground's reference frame to LiDAR's reference frame
+                    pixel_to_right = pixels[curr_row][column + 1];
+                    transform(THETA, pixel_to_right.y, pixel_to_right.z);  // Transform pixel_to_right from ground's reference frame to LiDAR's reference frame
+                    
+                    distance = abs(curr_pixel.z - pixel_to_right.z);
 
-                    distance = abs(curr_pixel.z - next_pixel.z);  // Calculate z distance between both pixels
-
-                    // Color curr_pixel, next_pixel, and a few surrounding pixels in the same column blue if there is an unsafe distance between curr_pixel and next_pixel (the distance is unsafe if it's greater than the wheel's radius)
+                    // Color the current pixel blue if there's an unsafe z distance between it and the pixel to the right (the distance is unsafe if it's greater than the wheel's radius)
                     if(distance > WHEEL_RAD)
                     {
-                        img.at<cv::Vec3b>(curr_row, column) = BLUE;  // Color the current pixel blue
-                        img.at<cv::Vec3b>(curr_row + 1, column) = BLUE;  // Color the pixel in the next row blue
-
-                        img.at<cv::Vec3b>(curr_row - 1, column) = BLUE;  // Color the pixel in the row above blue
-                        img.at<cv::Vec3b>(curr_row - 2, column) = BLUE;  // Color the pixel in the row two rows above blue
+                        img.at<cv::Vec3b>(curr_row, column) = BLUE;  // Color the pixel blue
+                        continue;
                     }
                 }
-                curr_row++;
             }
         }
     }
