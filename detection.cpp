@@ -53,13 +53,13 @@ class Pixel
 
 
 /** 
- * Reads in XYZ values of each pixel in point cloud frame from CSV files before performing linear regression on this data
+ * Reads in XYZ values of each pixel in LiDAR image from CSV files before performing linear regression on this data
  * to estimate ground plane and output the slope and y-intercept of a line on the ground plane (please refer to documentation for detailed explanation)
  * 
  * @param x_filename The absolute path to the CSV file containing the x values
  * @param y_filename The absolute path to the CSV file containing the y values
  * @param z_filename The absolute path to the CSV file containing the z values
- * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel point cloud frame
+ * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel LiDAR image
  * @param slope The outputted slope of the line of best
  * @param y_intercept The outputted y-intercept of the line of best fit 
  */ 
@@ -211,12 +211,12 @@ void transform(const double &angle_degrees, double& y, double& z)
 
 
 /** 
- * Reads in XYZ values of each pixel in point cloud frame from CSV files into a 2D vector of Pixel objects
+ * Reads in XYZ values of each pixel in LiDAR image from CSV files into a 2D vector of Pixel objects
  * 
  * @param x_filename The absolute path to the CSV file containing the x values
  * @param y_filename The absolute path to the CSV file containing the y values
  * @param z_filename The absolute path to the CSV file containing the z values
- * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel point cloud frame
+ * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel LiDAR image
  */ 
 void readInData(const std::string &x_filename, const std::string &y_filename, const std::string &z_filename, std::vector<std::vector<Pixel>> &pixels)
 {
@@ -315,13 +315,13 @@ void readInData(const std::string &x_filename, const std::string &y_filename, co
  * Takes in image and colors all pixels that could represent ditches or gaps in depth value between two objects blue
  * 
  * @param img Image to perform ditch detection on 
- * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel point cloud frame
+ * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel LiDAR image
  */ 
 void detectDitch(cv::Mat &img, const std::vector<std::vector<Pixel>> &pixels)
 {
     bool found_pixel = false;  // Flag variable used to break the while loops when a pixel with a valid depth value is found
 
-    // Loop through every pixel in the image until a pixel with a valid depth value is found
+    // Loop through every pixel in the 2D vector of Pixel objects until a pixel with a valid depth value is found
     int row = 0;
     while(row < 120)
     {
@@ -352,7 +352,7 @@ void detectDitch(cv::Mat &img, const std::vector<std::vector<Pixel>> &pixels)
     // Initialize temporary Pixel object which will be used to transform pixel from ground's reference frame to LiDAR's reference frame
     Pixel pixel;
 
-    // Loop through every pixel in the rest of the image until a pixel on the ground is found
+    // Loop through every pixel in the rest of the 2D vector of Pixel objects until a pixel on the ground is found
     while(row < 120)
     {
         int col = 0;
@@ -383,7 +383,7 @@ void detectDitch(cv::Mat &img, const std::vector<std::vector<Pixel>> &pixels)
 
     int found_ground_row = row;  // Store the row number of the first pixel on the ground that was found
     
-    // Starting from the row of the first pixel with a valid depth value that was found, loop through rest of image coloring every pixel that could represent a ditch or gap in depth value between two objects blue
+    // Starting from the row of the first pixel with a valid depth value that was found, loop through rest of the 2D vector of Pixel objects while coloring every pixel that could represent a ditch or gap in depth value between two objects blue in the image we're performing ditch detection on
     if(found_pixel && found_ground)
     {
         Pixel curr_pixel;  // The pixel in the current row and column
@@ -472,7 +472,7 @@ int main() {
     double roll_angle;
     
 
-    // Iterate through pixels in original black image, coloring them as appropriate
+    // Iterate through pixels in the LiDAR image (stored in the 2D vector of pixel objects), coloring the corresponding pixels in the original black image as appropriate
     int row = 0;
     for(std::vector<Pixel> pixel_row : pixels)
     {
