@@ -56,14 +56,13 @@ class Pixel
  * Reads in XYZ values of each pixel in LiDAR image from CSV files before performing linear regression on this data
  * to estimate ground plane and output the slope and y-intercept of a line on the ground plane (please refer to documentation for detailed explanation)
  * 
- * @param x_filename The absolute path to the CSV file containing the x values
  * @param y_filename The absolute path to the CSV file containing the y values
  * @param z_filename The absolute path to the CSV file containing the z values
  * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel LiDAR image
  * @param slope The outputted slope of the line of best
  * @param y_intercept The outputted y-intercept of the line of best fit 
  */ 
-void linearRegression(const std::string &x_filename, const std::string &y_filename, const std::string &z_filename, std::vector<std::vector<Pixel>> &pixels, double &slope, double &y_intercept)
+void linearRegression(const std::string &y_filename, const std::string &z_filename, std::vector<std::vector<Pixel>> &pixels, double &slope, double &y_intercept)
 {
     int total_num_points = 0;
     double y_total = 0;
@@ -72,7 +71,6 @@ void linearRegression(const std::string &x_filename, const std::string &y_filena
     double z_squared_total = 0;
 
     // Read in CSV files
-    std::ifstream x_file(x_filename);
     std::ifstream y_file(y_filename);
     std::ifstream z_file(z_filename);
 
@@ -83,7 +81,6 @@ void linearRegression(const std::string &x_filename, const std::string &y_filena
     // Skip over lines we don't want to read
     for(int i = 0; i < lines_to_skip; i++)
     {
-        std::getline(x_file, line);
         std::getline(y_file, line);     
         std::getline(z_file, line);                 
     }
@@ -99,7 +96,6 @@ void linearRegression(const std::string &x_filename, const std::string &y_filena
         // Skip over first three characters of each row of each file
         while(semicolon_count < 2)
         {
-            x_file >> skip;
             y_file >> skip;
             z_file >> skip;
             characters_skipped++;
@@ -114,21 +110,12 @@ void linearRegression(const std::string &x_filename, const std::string &y_filena
         // Iterate through each column in CSV files
         for(int col = 0; col < pixels[row].size(); col++)
         {
-            char character_x = ' ';
             char character_y = ' ';
             char character_z = ' ';
             
-            std::string str_x;
             std::string str_y;
             std::string str_z;
-            
-            // Read in x values while skipping semicolons 
-            while(character_x != ';')
-            {
-                x_file >> character_x;
-                str_x.push_back(character_x);
-            }
-            pixels[row][col].x = std::stod(str_x, NULL);  // Convert x value from string to double
+
 
             // Read in y values while skipping semicolons
             // PLEASE NOTE: We multiply the y value by -1 after reading it in because from the LiDAR's point-of-view, the positive y axis points downwards instead of upwards, so we flip the y axis and make "upwards" the positive direction
@@ -165,7 +152,6 @@ void linearRegression(const std::string &x_filename, const std::string &y_filena
         // Skip over last three characters of each row of each file
         for(int i = 0; i < characters_skipped; i++)
         {
-            x_file >> skip;
             y_file >> skip;
             z_file >> skip;
         }
