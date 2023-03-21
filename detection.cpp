@@ -43,9 +43,10 @@
 class Pixel
 {
     public:
-        double x; // x value of pixel
-        double y; // y value of pixel
-        double z; // z value of pixel
+        double x;  // X value of pixel
+        double y;  // Y value of pixel
+        double z;  // Z value of pixel
+        std::string color;  // Color of pixel
 };
 
 
@@ -303,7 +304,7 @@ void readInData(const std::string &x_filename, const std::string &y_filename, co
  * @param img Image to perform ditch detection on 
  * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel LiDAR image
  */ 
-void detectDitch(cv::Mat &img, const std::vector<std::vector<Pixel>> &pixels)
+void detectDitch(cv::Mat &img, std::vector<std::vector<Pixel>> &pixels)
 {
     bool found_pixel = false;  // Flag variable used to break the while loops when a pixel with a valid depth value is found
 
@@ -388,6 +389,7 @@ void detectDitch(cv::Mat &img, const std::vector<std::vector<Pixel>> &pixels)
                 if(curr_row >= found_ground_row && pixels[curr_row][column].z == -1)
                 {
                     img.at<cv::Vec3b>(curr_row, column) = BLUE;  // Color the pixel blue
+                    pixels[curr_row][column].color = "BLUE";
                     continue;
                 }
                 
@@ -406,6 +408,7 @@ void detectDitch(cv::Mat &img, const std::vector<std::vector<Pixel>> &pixels)
                     if(distance > WHEEL_RAD)
                     {
                         img.at<cv::Vec3b>(curr_row, column) = BLUE;  // Color the pixel blue
+                        pixels[curr_row][column].color = "BLUE";
                         continue;
                     }
                 }
@@ -425,6 +428,7 @@ void detectDitch(cv::Mat &img, const std::vector<std::vector<Pixel>> &pixels)
                     if(distance > WHEEL_RAD)
                     {
                         img.at<cv::Vec3b>(curr_row, column) = BLUE;  // Color the pixel blue
+                        pixels[curr_row][column].color = "BLUE";
                         continue;
                     }
                 }
@@ -474,6 +478,7 @@ int main() {
                 if(abs(pixel.y) <= GROUND)
                 {
                     img.at<cv::Vec3b>(row, col) = GRAY;  // Color the pixel gray
+                    pixels[row][col].color = "GRAY";
                     col++;
                     continue;
                 }
@@ -482,6 +487,7 @@ int main() {
                 else if(pixel.y > 0 && pixel.y <= SAFE)
                 {
                     img.at<cv::Vec3b>(row, col) = GREEN;  // Color the pixel green
+                    pixels[row][col].color = "GREEN";
                     col++;
                     continue;
                 }
@@ -522,6 +528,7 @@ int main() {
                     if(pixel.y < 0)
                     {
                         img.at<cv::Vec3b>(row, col) = BLUE;  // Color the pixel blue (to represent ditch)
+                        pixels[row][col].color = "BLUE";
                         pixels[row][col].z = -1;  // This is done to classify the pixel as a ditch so its pitch and roll angles don't need to be recalculated when detectDitch() is called later
                     }
 
@@ -529,6 +536,7 @@ int main() {
                     else
                     {
                         img.at<cv::Vec3b>(row, col) = RED;  // Color the pixel red
+                        pixels[row][col].color = "RED";
                     }
                 }
 
@@ -536,6 +544,7 @@ int main() {
                 else
                 {
                     img.at<cv::Vec3b>(row, col) = YELLOW;  // Color the pixel yellow
+                    pixels[row][col].color = "YELLOW";
                 }
             }
             col++;
