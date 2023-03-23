@@ -25,7 +25,7 @@
 #define SAFE                150.0         // Maximum height above ground (in mm) for pixel to be considered safe/traversible without worry (e.g. not-worrisome rock/obstacle)
 
 #define LIDAR_ANGLE         0.0                        // LiDAR's angle of inclination (relative to horizon) in degrees, where negative means tilted downwards and positive means tilted upwards
-#define OMEGA               3.9669                     // Ground plane's angle of inclination (in degrees) as it appears in LiDAR image when LiDAR is upright (has 0 angle of inclination). Refer to documentation for more info
+#define OMEGA               0.0000                     // Ground plane's angle of inclination (in degrees) as it appears in LiDAR image when LiDAR is upright (has 0 angle of inclination). Refer to documentation for more info
 #define THETA               (OMEGA + LIDAR_ANGLE)      // Angle in degrees by which ground reference frame must be rotated to be parallel with LiDAR reference frame (refer to documentation to understand how THETA was determined)
 #define PHI                 (90 - THETA)               // Please refer to documentation for explanation
 
@@ -461,25 +461,31 @@ int main() {
     double pitch_angle;
     double roll_angle;
     
+    
+    Pixel pixel;  // The current pixel the for loop below is on
+    Pixel ref_pixel;  // The reference pixel (the current pixel's slope with reference to this pixel will be determined)
+
 
     // Iterate through pixels in the LiDAR image (stored in the 2D vector of pixel objects), coloring the corresponding pixels in the original black image as appropriate
-    int row = 0;
-    for(std::vector<Pixel> pixel_row : pixels)
+    for(int col = 0; col < 160; col++)
     {
-        int col = 0;
-        for(Pixel pixel : pixel_row)
+        for(int row = 119; row >= 0; row--)
         {
-            if(pixel.z != -1)  // Checks if pixel has valid depth value
+            if(pixels[row][col].z != -1)  // Check if pixel has a valid depth value
             {   
-                // Transform pixel's coordinates from ground reference frame to LiDAR reference frame
-                transform(THETA, pixel.y, pixel.z);
-                
+                pixel = pixels[row][col];
+
+                transform(THETA, pixel.y, pixel.z);  // Transform pixel's coordinates from ground reference frame to LiDAR reference frame
+
                 // Color the pixel gray if it's on the ground
                 if(abs(pixel.y) <= GROUND)
                 {
                     img.at<cv::Vec3b>(row, col) = GRAY;  // Color the pixel gray
                     pixels[row][col].color = "GRAY";
-                    col++;
+                    
+                    ref_pixel = pixels[row][col];  // Set the reference pixel to the current pixel
+                    transform(THETA, ref_pixel.y, ref_pixel.z);  // Transform reference pixel from the ground's reference frame to LiDAR's reference frame
+                    
                     continue;
                 }
                 
@@ -488,35 +494,26 @@ int main() {
                 {
                     img.at<cv::Vec3b>(row, col) = GREEN;  // Color the pixel green
                     pixels[row][col].color = "GREEN";
-                    col++;
+                    
+                    ref_pixel = pixels[row][col];  // Set the reference pixel to the current pixel
+                    transform(THETA, ref_pixel.y, ref_pixel.z);  // Transform reference pixel from the ground's reference frame to LiDAR's reference frame
+                    
                     continue;
                 }
 
-                // Initialize ground_pixel object 
-                Pixel ground_pixel;
-                ground_pixel.x = 0;
-                ground_pixel.y = 0;
-                ground_pixel.z = 0;
-                
-                // Find the closest pixel on the ground (with a valid depth value) that is in the same column (of the LiDAR image) as the original pixel, and store its XYZ values in the ground_pixel object
-                int next_row = row + 1;
-                while(next_row < 120 && pixels[next_row][col].z != -1)  // Keep searching for this ground pixel until last possible row has been iterated through or a pixel of invalid depth is found  
+                // If a pixel 5 rows below the current pixel in the LiDAR image exists and has a valid depth value, set the reference pixel to this pixel before transforming it to LiDAR's reference frame
+                if(row + 5 <= 119 && pixels[row + 5][col].z != -1)
                 {
-                    ground_pixel = pixels[next_row][col];
-                    transform(THETA, ground_pixel.y, ground_pixel.z);
-                    if(abs(ground_pixel.y) <= GROUND)
-                    {
-                        break;
-                    }
-                    next_row++;
+                    ref_pixel = pixels[row + 5][col];
+                    transform(THETA, ref_pixel.y, ref_pixel.z);
                 }
-
-
+                
+                
                 x_dist = abs(pixel.x) + ROVER_WIDTH / 2;  // X distance from pixel to the farthest point on the front wheel that the rover will pivot on when rolling
-                y_dist = abs(pixel.y - ground_pixel.y);  // Y distance from pixel to ground_pixel (the closest pixel on the ground that's in the same column)
-                z_dist = abs(pixel.z - ground_pixel.z);  // Z distance from pixel to ground_pixel (the closest pixel on the ground that's in the same column)
+                y_dist = abs(pixel.y - ref_pixel.y);  // Y distance from current pixel to reference pixel
+                z_dist = abs(pixel.z - ref_pixel.z);  // Z distance from current pixel to reference pixel
 
-                // Determine pitch and roll angles
+                // Determine pitch and roll angles of the current pixel with reference to the reference pixel
                 pitch_angle = atan2(y_dist, z_dist) * TO_DEG;
                 roll_angle = atan2(y_dist, x_dist) * TO_DEG;
 
@@ -547,9 +544,7 @@ int main() {
                     pixels[row][col].color = "YELLOW";
                 }
             }
-            col++;
         }
-        row++;
     }
 
 
