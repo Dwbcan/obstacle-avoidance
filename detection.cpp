@@ -370,7 +370,8 @@ void detectDitch(cv::Mat &img, std::vector<std::vector<Pixel>> &pixels)
 
     int found_ground_row = row;  // Store the row number of the first pixel on the ground that was found
     
-    // Starting from the row of the first pixel with a valid depth value that was found, loop through rest of the 2D vector of Pixel objects while coloring every pixel that could represent a ditch or gap in depth value between two objects blue in the image we're performing ditch detection on
+    /* Starting from the row of the first pixel with a valid depth value that was found, loop through rest of the 2D vector of Pixel objects 
+       while coloring every pixel that could represent a ditch or gap in depth value between two objects blue in the image we're performing ditch detection on */
     if(found_pixel && found_ground)
     {
         Pixel curr_pixel;  // The pixel in the current row and column
@@ -393,6 +394,34 @@ void detectDitch(cv::Mat &img, std::vector<std::vector<Pixel>> &pixels)
                     continue;
                 }
                 
+                /* If the pixel in the current row is not on the ground and has an invalid depth value, search the rows above until a pixel (in the same column) with a valid depth value is found.
+                   From the row of this pixel, iterate back to the original row while coloring all the pixels in the column with invalid depths blue.
+                   This is done since all undetected pixels that are located below detected pixels in the LiDAR image, can be considered ditches */
+                if(curr_row < found_ground_row && pixels[curr_row][column].z == -1)
+                {
+                    int row = curr_row - 1;
+
+                    // Loop through rows above (in the same column) until a pixel with valid depth or a blue pixel is found
+                    while(row >= found_pixel_row)
+                    {
+                        if(pixels[row][column].z != -1 || pixels[row][column].color == "BLUE")
+                        {
+                            row++;
+
+                            // Loop back to original row while coloring all pixels with invalid depths blue
+                            while(row <= curr_row)
+                            {
+                                img.at<cv::Vec3b>(row, column) = BLUE;  // Color the pixel blue
+                                pixels[row][column].color = "BLUE";
+                                row++;
+                            }
+                            break;  // Break outer while loop after reaching original row
+                        }
+                        row--;
+                    }
+                    continue;
+                }
+
                 // If the current pixel and the pixel in the row above both have valid depth values, determine if there is a ditch or gap in depth value based on the z distance between these pixels
                 if(pixels[curr_row][column].z != -1 && pixels[curr_row - 1][column].z != -1)
                 {
@@ -501,10 +530,10 @@ int main() {
                     continue;
                 }
 
-                // If a pixel 5 rows below the current pixel in the LiDAR image exists and has a valid depth value, set the reference pixel to this pixel before transforming it to LiDAR's reference frame
-                if(row + 5 <= 119 && pixels[row + 5][col].z != -1)
+                // If a pixel 3 rows below the current pixel in the LiDAR image exists and has a valid depth value, set the reference pixel to this pixel before transforming it to LiDAR's reference frame
+                if(row + 3 <= 119 && pixels[row + 3][col].z != -1)
                 {
-                    ref_pixel = pixels[row + 5][col];
+                    ref_pixel = pixels[row + 3][col];
                     transform(THETA, ref_pixel.y, ref_pixel.z);
                 }
                 
