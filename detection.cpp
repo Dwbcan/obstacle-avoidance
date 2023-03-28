@@ -224,6 +224,37 @@ void readInData(const std::string &x_filename, const std::string &y_filename, co
 
 
 /** 
+ * Calculates current pixel's pitch angle with reference to a reference pixel 3 rows below current pixel in LiDAR image, if this reference pixel exists
+ * 
+ * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel LiDAR image
+ * @param row Current row in vector of Pixel objects
+ * @param col Current column in vector of Pixel objects
+ * @param pixel Current Pixel object in vector of Pixel objects
+ * @param ref_pixel Reference pixel (the current pixel's pitch with reference to this pixel will be determined)
+ * @param theta Angle in degrees that pixel will be rotated by about x axis to be parallel with LiDAR's reference frame
+ * @param pitch_angle Variable to store pitch angle output (in degrees) between pixel and ref_pixel
+ */ 
+void calculatePitch(const std::vector<std::vector<Pixel>> &pixels, const int &row, const int &col, const Pixel &pixel, Pixel &ref_pixel, const double &theta, double &pitch_angle)
+{
+    // If a pixel 3 rows below the current pixel in the LiDAR image exists and has a valid depth value, set the reference pixel to this pixel before transforming it to LiDAR's reference frame
+    if(row + 3 <= 119 && pixels[row + 3][col].z != -1)
+    {
+        ref_pixel = pixels[row + 3][col];
+        transform(theta, ref_pixel.y, ref_pixel.z);
+    }
+
+    double y_dist = abs(pixel.y - ref_pixel.y);  // Y distance from current pixel to reference pixel
+    double z_dist = abs(pixel.z - ref_pixel.z);  // Z distance from current pixel to reference pixel
+
+    // Determine pitch angle of the current pixel with reference to the reference pixel
+    pitch_angle = atan2(y_dist, z_dist) * TO_DEG;
+}
+
+
+
+
+
+/** 
  * Takes in image and colors all pixels that could represent ditches or gaps in depth value between two objects blue
  * 
  * @param img Image to perform ditch detection on 
@@ -416,10 +447,7 @@ int main() {
     double theta = LIDAR_ANGLE - ground_slope;  // Angle in degrees by which ground reference frame must be rotated to be parallel with LiDAR reference frame (negative means tilted downwards and positive means tilted upwards)
 
 
-    // Initialize variables
-    double x_dist;
-    double y_dist;
-    double z_dist;
+    // Initialize variables to store pitch and roll angles
     double pitch_angle;
     double roll_angle;
     
@@ -462,22 +490,10 @@ int main() {
                     
                     continue;
                 }
-
-                // If a pixel 3 rows below the current pixel in the LiDAR image exists and has a valid depth value, set the reference pixel to this pixel before transforming it to LiDAR's reference frame
-                if(row + 3 <= 119 && pixels[row + 3][col].z != -1)
-                {
-                    ref_pixel = pixels[row + 3][col];
-                    transform(theta, ref_pixel.y, ref_pixel.z);
-                }
                 
-                
-                x_dist = abs(pixel.x) + ROVER_WIDTH / 2;  // X distance from pixel to the farthest point on the front wheel that the rover will pivot on when rolling
-                y_dist = abs(pixel.y - ref_pixel.y);  // Y distance from current pixel to reference pixel
-                z_dist = abs(pixel.z - ref_pixel.z);  // Z distance from current pixel to reference pixel
 
-                // Determine pitch and roll angles of the current pixel with reference to the reference pixel
-                pitch_angle = atan2(y_dist, z_dist) * TO_DEG;
-                roll_angle = atan2(y_dist, x_dist) * TO_DEG;
+                // Calculate current pixel's pitch angle with reference to a pixel 3 rows below (ref_pixel)
+                calculatePitch(pixels, row, col, pixel, ref_pixel, theta, pitch_angle);
 
 
                 // If the pixel has too high of a pitch or roll angle, color it blue (if it lies below the ground) or red (if it lies above the ground)
