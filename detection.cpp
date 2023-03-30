@@ -25,8 +25,9 @@
 #define GROUND              100.0         // Maximum absolute value y distance (in mm) from ground to pixel, for pixel to be considered ground in obstacle detection algorithm
 #define SAFE                150.0         // Maximum height above ground (in mm) for pixel to be considered safe/traversible without worry (e.g. not-worrisome rock/obstacle)
 
-#define LIDAR_ANGLE         0.0                        // LiDAR's angle of inclination (relative to horizon) in degrees, where negative means tilted downwards and positive means tilted upwards
-#define OUTLIER             50.0                       // Maximum absolute value height of pixel (in mm) from ground, to not be considered an outlier in ground plane estimation with linear regression
+#define LIDAR_ANGLE         0.0           // LiDAR's angle of inclination (relative to horizon) in degrees, where negative means tilted downwards and positive means tilted upwards
+#define OUTLIER             50.0          // Maximum absolute value height of pixel (in mm) from ground, to not be considered an outlier in ground plane estimation with linear regression
+#define PIX_PER_DEG         (160.0/90)    // Since LiDAR has 90 degree horizontal FOV and LiDAR image has 160 pixel width, for every degree we move horizontally in 3D space, we move PIX_PER_DEG pixels horizontally in LiDAR image
 
 #define BLACK               cv::Vec3b(0, 0, 0)         // The color black in OpenCV (in BGR)
 #define GRAY                cv::Vec3b(125, 125, 125)   // The color gray in OpenCV (in BGR)
@@ -224,30 +225,161 @@ void readInData(const std::string &x_filename, const std::string &y_filename, co
 
 
 /** 
- * Calculates current pixel's pitch angle with reference to a reference pixel 3 rows below current pixel in LiDAR image, if this reference pixel exists
+ * Calculates current pixel's pitch angle with reference to a nearby pixel in the same column of the LiDAR image
  * 
  * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel LiDAR image
  * @param row Current row in vector of Pixel objects
  * @param col Current column in vector of Pixel objects
- * @param pixel Current Pixel object in vector of Pixel objects
- * @param ref_pixel Reference pixel (the current pixel's pitch with reference to this pixel will be determined)
+ * @param curr_pixel Current Pixel object in vector of Pixel objects
+ * @param pitch_ref_pixel Reference pixel (the current pixel's pitch angle with reference to this pixel will be determined)
  * @param theta Angle in degrees that pixel will be rotated by about x axis to be parallel with LiDAR's reference frame
- * @param pitch_angle Variable to store pitch angle output (in degrees) between pixel and ref_pixel
+ * @param pitch_angle Variable to store pitch angle output (in degrees) between curr_pixel and pitch_ref_pixel
  */ 
-void calculatePitch(const std::vector<std::vector<Pixel>> &pixels, const int &row, const int &col, const Pixel &pixel, Pixel &ref_pixel, const double &theta, double &pitch_angle)
+void calculatePitch(const std::vector<std::vector<Pixel>> &pixels, const int &row, const int &col, const Pixel &curr_pixel, Pixel &pitch_ref_pixel, const double &theta, double &pitch_angle)
 {
-    // If a pixel 3 rows below the current pixel in the LiDAR image exists and has a valid depth value, set the reference pixel to this pixel before transforming it to LiDAR's reference frame
-    if(row + 3 <= 119 && pixels[row + 3][col].z != -1)
+    bool found_ref_pixel = false;  // Flag variable used to break while loop when a pixel with a valid depth value is found
+    
+    int curr_row = row + 3;
+
+    // Starting from a row 3 rows below current pixel, search the image from bottom to top for a pixel (in the same column) with a valid depth value and set this pixel as the reference pixel
+    while(curr_row > row)
     {
-        ref_pixel = pixels[row + 3][col];
-        transform(theta, ref_pixel.y, ref_pixel.z);
+        // Check if pixel exists and has a valid depth value
+        if(curr_row <= 119 && pixels[curr_row][col].z != -1)
+        {
+            pitch_ref_pixel = pixels[curr_row][col];
+            transform(theta, pitch_ref_pixel.y, pitch_ref_pixel.z);  // Transform pixel from ground's reference frame to LiDAR's reference frame
+
+            double y_dist = abs(curr_pixel.y - pitch_ref_pixel.y);  // Y distance from current pixel to reference pixel
+            double z_dist = abs(curr_pixel.z - pitch_ref_pixel.z);  // Z distance from current pixel to reference pixel
+
+            // Determine pitch angle of the current pixel with reference to the reference pixel
+            pitch_angle = atan2(y_dist, z_dist) * TO_DEG;
+            
+            found_ref_pixel = true;
+            break;
+        }
+        curr_row--;
     }
 
-    double y_dist = abs(pixel.y - ref_pixel.y);  // Y distance from current pixel to reference pixel
-    double z_dist = abs(pixel.z - ref_pixel.z);  // Z distance from current pixel to reference pixel
+    // In the case that a reference pixel was not found, set pitch_angle to exceed MAX_PITCH threshold just to be safe
+    if(!found_ref_pixel)
+    {
+        pitch_angle = MAX_PITCH + 1;
+    }
+}
 
-    // Determine pitch angle of the current pixel with reference to the reference pixel
-    pitch_angle = atan2(y_dist, z_dist) * TO_DEG;
+
+
+
+
+/** 
+ * Calculates roll angle between rover's front left and front right wheels 
+ * 
+ * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel LiDAR image
+ * @param col Current column in vector of Pixel objects
+ * @param curr_pixel Current Pixel object in vector of Pixel objects (we'll assume bottom centre of rover's front face will be located at curr_pixel's position in 3D space)
+ * @param theta Angle in degrees that pixel will be rotated by about x axis to be parallel with LiDAR's reference frame
+ * @param roll_angle Variable to store roll angle output (in degrees) between rover's front left and right wheels
+ */ 
+void calculateRoll(const std::vector<std::vector<Pixel>> &pixels, const int &col, const Pixel &curr_pixel, const double &theta, double &roll_angle)
+{
+    // Initialize left_pixel and right_pixel objects (curr_pixel represents bottom centre of rover's front face, so left_pixel and right_pixel represent rover's left and right wheels)
+    Pixel left_pixel = curr_pixel;
+    Pixel right_pixel = curr_pixel;
+
+    // Set x coordinates (left_pixel is a half rover width to the left of curr_pixel while right_pixel is a half rover width to the right)
+    left_pixel.x = curr_pixel.x - ROVER_WIDTH / 2;
+    right_pixel.x = curr_pixel.x + ROVER_WIDTH / 2;
+
+    double left_angle = abs(atan2(left_pixel.x, left_pixel.z) * TO_DEG - atan2(curr_pixel.x, curr_pixel.z) * TO_DEG);  // Yaw angle between left_pixel and curr_pixel (in degrees)
+    double right_angle = abs(atan2(right_pixel.x, right_pixel.z) * TO_DEG - atan2(curr_pixel.x, curr_pixel.z) * TO_DEG);  // Yaw angle between right_pixel and curr_pixel (in degrees)
+    
+    int move_left = int(ceil(left_angle * PIX_PER_DEG));  // Amount of pixels to move left from curr_pixel to reach left_pixel
+    int move_right = int(ceil(right_angle * PIX_PER_DEG));  // Amount of pixels to move right from curr_pixel to reach right_pixel
+
+    int col_left = col - move_left;  // Column of left_pixel in LiDAR image
+    int col_right = col + move_right;  // Column of right_pixel in LiDAR image
+
+    // Ensure col_left is within bounds
+    if(col_left < 0)
+    {
+        col_left = 0;
+    }
+
+    // Ensure col_right is within bounds
+    if(col_right >= 160)
+    {
+        col_right = 159;
+    }
+
+    bool found_left_pixel = false;  // Flag variable used to indicate left_pixel has been found
+    bool found_right_pixel = false;  // Flag variable used to indicate right_pixel has been found
+
+    /* Starting from the left-most and right-most columns of the LiDAR image, iterate towards curr_pixel's column from both sides 
+       until both left_pixel and right_pixel have been found */
+    while(col_left < col && col_right > col)
+    {
+        int curr_row = 0;
+
+        if(!found_left_pixel || !found_right_pixel)
+        {
+            /* Starting from the top of the column, search for left_pixel and right_pixel in their respective columns. 
+               The left_pixel and right_pixel objects will be the first pixels from the top of their column that are within 100 mm of curr_pixel */
+            while(curr_row < 120)
+            {
+                // If left_pixel hasn't already been found and pixel has a valid depth value within 100 mm of curr_pixel's depth value, set left_pixel to this pixel
+                if(!found_left_pixel && pixels[curr_row][col_left].z != -1)
+                {
+                    left_pixel = pixels[curr_row][col_left];
+                    transform(theta, left_pixel.y, left_pixel.z);  // Transform pixel from ground's reference frame to LiDAR's reference frame
+
+                    if(abs(left_pixel.z - curr_pixel.z) <= 100)
+                    {
+                        found_left_pixel = true;
+                    }
+                }
+                
+                // If right_pixel hasn't already been found and pixel has a valid depth value within 100 mm of curr_pixel's depth value, set right_pixel to this pixel
+                if(!found_right_pixel && pixels[curr_row][col_right].z != -1)
+                {
+                    right_pixel = pixels[curr_row][col_right];
+                    transform(theta, right_pixel.y, right_pixel.z);  // Transform pixel from ground's reference frame to LiDAR's reference frame
+
+                    if(abs(right_pixel.z - curr_pixel.z) <= 100)
+                    {
+                        found_right_pixel = true;
+                    }
+                }
+
+                // If both left_pixel and right_pixel have been found, break inner while loop
+                if(found_left_pixel && found_right_pixel)
+                {
+                    break;
+                }
+                curr_row++;
+            }
+        }
+
+        // If left_pixel and right_pixel is found, calculate roll angle between them and break outer while loop
+        if(found_left_pixel && found_right_pixel)
+        {
+            double x_dist = abs(left_pixel.x - right_pixel.x);  // X distance from left_pixel to right_pixel
+            double y_dist = abs(left_pixel.y - right_pixel.y);  // Y distance from left_pixel to right_pixel
+
+            // Determine roll angle between left_pixel and right_pixel (this is the roll angle between rover's left and right wheels if bottom centre of rover is located at curr_pixel's position in 3D space)
+            roll_angle = atan2(y_dist, x_dist) * TO_DEG;
+            break;
+        }
+        col_left++;
+        col_right--;
+    }
+    
+    // In the case that either left_pixel or right_pixel was not found, set roll_angle to exceed MAX_ROLL threshold just to be safe
+    if(!found_left_pixel || !found_right_pixel)
+    {
+        roll_angle = MAX_ROLL + 1;
+    }
 }
 
 
@@ -453,7 +585,7 @@ int main() {
     
     
     Pixel pixel;  // The current pixel the for loop below is on
-    Pixel ref_pixel;  // The reference pixel (the current pixel's slope with reference to this pixel will be determined)
+    Pixel pitch_ref_pixel;  // The reference pixel for pitch (the current pixel's pitch angle with reference to this pixel will be determined)
 
 
     // Iterate through pixels in the LiDAR image (stored in the 2D vector of pixel objects), coloring the corresponding pixels in the original black image as appropriate
@@ -472,10 +604,7 @@ int main() {
                 {
                     img.at<cv::Vec3b>(row, col) = GRAY;  // Color the pixel gray
                     pixels[row][col].color = "GRAY";
-                    
-                    ref_pixel = pixels[row][col];  // Set the reference pixel to the current pixel
-                    transform(theta, ref_pixel.y, ref_pixel.z);  // Transform reference pixel from the ground's reference frame to LiDAR's reference frame
-                    
+                                        
                     continue;
                 }
                 
@@ -484,16 +613,16 @@ int main() {
                 {
                     img.at<cv::Vec3b>(row, col) = GREEN;  // Color the pixel green
                     pixels[row][col].color = "GREEN";
-                    
-                    ref_pixel = pixels[row][col];  // Set the reference pixel to the current pixel
-                    transform(theta, ref_pixel.y, ref_pixel.z);  // Transform reference pixel from the ground's reference frame to LiDAR's reference frame
-                    
+                                        
                     continue;
                 }
                 
 
-                // Calculate current pixel's pitch angle with reference to a pixel 3 rows below (ref_pixel)
-                calculatePitch(pixels, row, col, pixel, ref_pixel, theta, pitch_angle);
+                // Calculate current pixel's pitch angle (in degrees) with reference to a nearby pixel (pitch_ref_pixel) below the current pixel and in the same column in the LiDAR image
+                calculatePitch(pixels, row, col, pixel, pitch_ref_pixel, theta, pitch_angle);
+
+                // Calculate roll angle (in degrees) between rover's left and right wheels assuming bottom centre of rover is located at current pixel's position in 3D space
+                calculateRoll(pixels, col, pixel, theta, roll_angle);
 
 
                 // If the pixel has too high of a pitch or roll angle, color it blue (if it lies below the ground) or red (if it lies above the ground)
