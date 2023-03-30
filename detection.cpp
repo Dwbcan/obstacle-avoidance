@@ -225,6 +225,35 @@ void readInData(const std::string &x_filename, const std::string &y_filename, co
 
 
 /** 
+ * Finds and returns the median value of a vector of doubles
+ * 
+ * @param kernel The vector of doubles whose median value will be returned
+ */ 
+double findMedian(std::vector<double>& kernel) {
+    
+    // Find the middle index of the vector
+    int middle = int(kernel.size() / 2);
+    
+    // Use nth_element algorithm to find the middle value
+    std::nth_element(kernel.begin(), kernel.begin() + middle, kernel.end());
+    
+    // If the vector has an odd number of elements, the middle value is the median
+    if (kernel.size() % 2 != 0) {
+        return kernel[middle];
+    }
+    
+    // If the vector has an even number of elements, the median is the average of the two middle values
+    else {
+        std::nth_element(kernel.begin(), kernel.begin() + middle - 1, kernel.end());
+        return (kernel[middle - 1] + kernel[middle]) / 2.0;
+    }
+}
+
+
+
+
+
+/** 
  * Calculates current pixel's pitch angle with reference to a nearby pixel in the same column of the LiDAR image
  * 
  * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel LiDAR image
