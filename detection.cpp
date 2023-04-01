@@ -87,14 +87,21 @@ void transform(const double &angle_degrees, double& y, double& z)
  * Reads in XYZ values of each pixel in LiDAR image from CSV files into a 2D vector of Pixel objects before performing linear regression on this data 
  * to estimate the ground plane and output its slope (please refer to documentation for detailed explanation)
  * 
- * @param x_filename The absolute path to the CSV file containing the x values
- * @param y_filename The absolute path to the CSV file containing the y values
- * @param z_filename The absolute path to the CSV file containing the z values
+ * @param x_filename The absolute path to the CSV file containing the x values (please see sample CSV files in repo)
+ * @param y_filename The absolute path to the CSV file containing the y values (please see sample CSV files in repo)
+ * @param z_filename The absolute path to the CSV file containing the z values (please see sample CSV files in repo)
  * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel LiDAR image
  * @param ground_slope Variable to store the ground plane's slope output in degrees
+ * @param found_pixel_row Variable to store the row number of the first pixel with a valid depth value that was found (this info will be used later in median filtering)
+ * @param found_pixel_col Variable to store the column number of the first pixel with a valid depth value that was found (this info will be used later in median filtering)
  */ 
-void readInData(const std::string &x_filename, const std::string &y_filename, const std::string &z_filename, std::vector<std::vector<Pixel>> &pixels, double &ground_slope)
+void readInData(const std::string &x_filename, const std::string &y_filename, const std::string &z_filename, std::vector<std::vector<Pixel>> &pixels, double &ground_slope, int &found_pixel_row, int &found_pixel_col)
 {
+    // Initalize temporary Pixel object to check if current pixel should be considered for linear regression calculation
+    Pixel pixel;
+
+    bool found_valid_pixel = false;  // Flag variable used to indicate that the first pixel with a valid depth value has been found
+
     int total_num_points = 0;  // Total number of pixels used in linear regression calculation
     double y_total = 0;  // Sum of y values of all pixels used in linear regression calculation
     double z_total = 0;  // Sum of z values of all pixels used in linear regression calculation
@@ -126,7 +133,7 @@ void readInData(const std::string &x_filename, const std::string &y_filename, co
         int characters_skipped = 0;
         int semicolon_count = 0;
         
-        // Skip over first three characters of each row of each file
+        // Skip over first characters of each row of each file until two consecutive semicolons have been skipped (see sample CSV files in repo)
         while(semicolon_count < 2)
         {
             x_file >> skip;
@@ -152,6 +159,28 @@ void readInData(const std::string &x_filename, const std::string &y_filename, co
             std::string str_y;
             std::string str_z;
             
+            // Read in z values while skipping semicolons
+            while(character_z != ';')
+            {
+                z_file >> character_z;
+                str_z.push_back(character_z);
+            }
+            pixels[row][col].z = std::stod(str_z, NULL);  // Convert z value from string to double
+
+            // If z value is invalid (has a value of -1), skip the corresponding x and y values of the current pixel in the LiDAR image
+            if(pixels[row][col].z == -1)
+            {
+                while(character_x != ';')
+                {
+                    x_file >> character_x;
+                }
+                while(character_y != ';')
+                {
+                    y_file >> character_y;
+                }
+                continue;
+            }
+            
             // Read in x values while skipping semicolons 
             while(character_x != ';')
             {
@@ -169,38 +198,36 @@ void readInData(const std::string &x_filename, const std::string &y_filename, co
             }
             pixels[row][col].y = std::stod(str_y, NULL) * -1;  // Convert y value from string to double
 
-            // Read in z values while skipping semicolons
-            while(character_z != ';')
+
+            // If the current pixel is the first pixel in the LiDAR image with a valid depth value, store the row and column number of this pixel
+            if(!found_valid_pixel)
             {
-                z_file >> character_z;
-                str_z.push_back(character_z);
+                found_valid_pixel = true;
+                found_pixel_row = row;
+                found_pixel_col = col;
             }
-            pixels[row][col].z = std::stod(str_z, NULL);  // Convert z value from string to double
 
+            pixel = pixels[row][col];
 
-            // Consider pixel for linear regression calculation if pixel has valid depth value, is within a rover length away from LiDAR, and isn't an outlier
-            if(pixels[row][col].z != -1)
-            {
-                Pixel pixel = pixels[row][col];
-
-                transform(LIDAR_ANGLE, pixel.y, pixel.z);  // Transform pixel to LiDAR's reference frame
-
-                if(abs(pixel.y) <= OUTLIER && pixel.z <= ROVER_LENGTH)
-                {
-                    double pixel_z = pixel.z;
-                    double pixel_y = pixel.y;
+            transform(LIDAR_ANGLE, pixel.y, pixel.z);  // Transform pixel to LiDAR's reference frame
             
-                    total_num_points++;
-                    y_total += pixel_y;
-                    z_total += pixel_z;
-                    zy_total += pixel_z * pixel_y;
-                    z_squared_total += pixel_z * pixel_z;
-                }
+            // Consider pixel for linear regression calculation if pixel is within a rover length away from LiDAR and isn't an outlier
+            if(abs(pixel.y) <= OUTLIER && pixel.z <= ROVER_LENGTH)
+            {
+                double pixel_z = pixel.z;
+                double pixel_y = pixel.y;
+        
+                total_num_points++;
+                y_total += pixel_y;
+                z_total += pixel_z;
+                zy_total += pixel_z * pixel_y;
+                z_squared_total += pixel_z * pixel_z;
             }
         }
 
-        // Skip over last three characters of each row of each file
-        for(int i = 0; i < characters_skipped; i++)
+        // Skip over last characters of each row of each file starting from the first semicolon of two consecutive semicolons (see sample CSV files in repo)
+        // PLEASE NOTE: We skip over the last "characters_skipped - 1" characters because in the most recent iteration of the for loop above, we have already read in the first semicolon of the two consecutive semicolons
+        for(int i = 0; i < characters_skipped - 1; i++)
         {
             x_file >> skip;
             y_file >> skip;
@@ -213,10 +240,6 @@ void readInData(const std::string &x_filename, const std::string &y_filename, co
     {
         ground_slope = (total_num_points * zy_total - z_total * y_total) / (total_num_points * z_squared_total - z_total * z_total);
         ground_slope = atan(ground_slope) * TO_DEG;
-    }
-    else
-    {
-        ground_slope = 0;
     }
 }
 
@@ -540,8 +563,9 @@ void detectDitch(cv::Mat &img, std::vector<std::vector<Pixel>> &pixels, const do
                     continue;
                 }
 
-                // If the current pixel and the pixel in the row above both have valid depth values, determine if there is a ditch or gap in depth value based on the z distance between these pixels
-                if(pixels[curr_row][column].z != -1 && pixels[curr_row - 1][column].z != -1)
+                /* If the current pixel isn't already blue, has a valid depth value, and the pixel in the row above also has a valid depth value, 
+                   determine if there is a ditch or gap in depth value based on the z distance between these pixels */
+                if(pixels[curr_row][column].color != "BLUE" && pixels[curr_row][column].z != -1 && pixels[curr_row - 1][column].z != -1)
                 {
                     curr_pixel = pixels[curr_row][column];
                     transform(theta, curr_pixel.y, curr_pixel.z);  // Transform curr_pixel from ground's reference frame to LiDAR's reference frame
@@ -560,8 +584,9 @@ void detectDitch(cv::Mat &img, std::vector<std::vector<Pixel>> &pixels, const do
                     }
                 }
                 
-                // If the current pixel and the pixel in the column to the right both have valid depth values, determine if there is a ditch or gap in depth value based on the z distance between these pixels
-                if(pixels[curr_row][column].z != -1 && pixels[curr_row][column + 1].z != -1)
+                /* If the current pixel isn't already blue, has a valid depth value, and the pixel in the column to the right also has a valid depth value, 
+                   determine if there is a ditch or gap in depth value based on the z distance between these pixels */
+                if(pixels[curr_row][column].color != "BLUE" && pixels[curr_row][column].z != -1 && pixels[curr_row][column + 1].z != -1)
                 {
                     curr_pixel = pixels[curr_row][column];
                     transform(theta, curr_pixel.y, curr_pixel.z);  // Transform curr_pixel from ground's reference frame to LiDAR's reference frame
@@ -598,7 +623,11 @@ int main() {
     std::vector<std::vector<Pixel>> pixels(120, std::vector<Pixel>(160));
     
     
-    double ground_slope;  // Ground plane's angle of inclination in degrees (negative means tilted downwards and positive means tilted upwards)
+    double ground_slope = 0;  // Ground plane's angle of inclination in degrees (negative means tilted downwards and positive means tilted upwards)
+
+
+    int found_pixel_row = 0;  // Row of first pixel in LiDAR image with a valid depth value (this will be determined after calling readInData() function)
+    int found_pixel_col = 0;  // Column of first pixel in LiDAR image with a valid depth value (this will be determined after calling readInData() function)
 
 
     // Read in XYZ data and output ground plane's angle of inclination (ground_slope)
@@ -633,7 +662,6 @@ int main() {
                 {
                     img.at<cv::Vec3b>(row, col) = GRAY;  // Color the pixel gray
                     pixels[row][col].color = "GRAY";
-                                        
                     continue;
                 }
                 
@@ -642,7 +670,6 @@ int main() {
                 {
                     img.at<cv::Vec3b>(row, col) = GREEN;  // Color the pixel green
                     pixels[row][col].color = "GREEN";
-                                        
                     continue;
                 }
                 
@@ -662,7 +689,6 @@ int main() {
                     {
                         img.at<cv::Vec3b>(row, col) = BLUE;  // Color the pixel blue (to represent ditch)
                         pixels[row][col].color = "BLUE";
-                        pixels[row][col].z = -1;  // This is done to classify the pixel as a ditch so its pitch and roll angles don't need to be recalculated when detectDitch() is called later
                     }
 
                     // Color the pixel red if it's above the ground
