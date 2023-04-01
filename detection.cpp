@@ -631,7 +631,7 @@ int main() {
 
 
     // Read in XYZ data and output ground plane's angle of inclination (ground_slope)
-    readInData("absolute-path-to-x-values-file.csv", "absolute-path-to-y-values-file.csv", "absolute-path-to-z-values-file.csv", pixels, ground_slope);
+    readInData("absolute-path-to-x-values-file.csv", "absolute-path-to-y-values-file.csv", "absolute-path-to-z-values-file.csv", pixels, ground_slope, found_pixel_row, found_pixel_col);
 
 
     double theta = LIDAR_ANGLE - ground_slope;  // Angle in degrees by which ground reference frame must be rotated to be parallel with LiDAR reference frame (negative means tilted downwards and positive means tilted upwards)
