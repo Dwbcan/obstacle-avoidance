@@ -252,7 +252,7 @@ void readInData(const std::string &x_filename, const std::string &y_filename, co
  * 
  * @param kernel The vector of doubles whose median value will be returned
  */ 
-double findMedian(std::vector<double>& kernel) {
+double findMedian(std::vector<double> &kernel) {
     
     // Find the middle index of the vector
     int middle = int(kernel.size() / 2);
@@ -269,6 +269,65 @@ double findMedian(std::vector<double>& kernel) {
     else {
         std::nth_element(kernel.begin(), kernel.begin() + middle - 1, kernel.end());
         return (kernel[middle - 1] + kernel[middle]) / 2.0;
+    }
+}
+
+
+
+
+
+/**
+ * Performs median filtering on pixels, using a 9 (width) by 3 (height) kernel to filter out noise
+ * 
+ * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel LiDAR image
+ * @param found_pixel_row Row number of first pixel with a valid depth value that was found in readInData() function (median filtering starts from this pixel's row)
+ * @param found_pixel_col Column number of first pixel with a valid depth value that was found in readInData() function (median filtering starts from this pixel's column)
+ */
+void medianFilter(std::vector<std::vector<Pixel>> &pixels, const int &found_pixel_row, const int &found_pixel_col)
+{   
+    // Initialize vectors to store XYZ values
+    std::vector<double> x_values;
+    std::vector<double> y_values;
+    std::vector<double> z_values;
+
+    // Loop through each row in 2D vector of Pixel objects, starting at row of first pixel with a valid depth value that was found
+    for(int row = found_pixel_row; row < 120; row++)
+    {
+        // Loop through each column in 2D vector of Pixel objects
+        for(int col = 0; col < 160; col++)
+        {
+            // Skip pixel if it has an invalid depth value
+            if(pixels[row][col].z == -1)
+            {
+                continue;
+            }
+
+            // Initialize 9 by 3 kernel
+            std::vector<std::pair<int, int>> kernel = {{row - 1, col - 4}, {row - 1, col - 3}, {row - 1, col - 2}, {row - 1, col - 1}, {row - 1, col}, {row - 1, col + 1}, {row - 1, col + 2}, {row - 1, col + 3}, {row - 1, col + 4}, 
+            {row, col - 4}, {row, col - 3}, {row, col - 2}, {row, col - 1}, {row, col}, {row, col + 1}, {row, col + 2}, {row, col + 3}, {row, col + 4},
+            {row + 1, col - 4}, {row + 1, col - 3}, {row + 1, col - 2}, {row + 1, col - 1}, {row + 1, col}, {row + 1, col + 1}, {row + 1, col + 2}, {row + 1, col + 3}, {row + 1, col + 4}};
+
+            // Loop through every pixel in 9 by 3 kernel, considering the pixel for median filtering calculation if it's in bounds and has a valid depth value
+            for(int i = 0; i < kernel.size(); i++)
+            {if(i == 0 || i == 8 || i == 9 || i == 17 || i == 18 || i == 26){continue;}
+                if(kernel[i].first >= 0 && kernel[i].first < 120 && kernel[i].second >= 0 && kernel[i].second < 160 && pixels[kernel[i].first][kernel[i].second].z != -1)
+                {
+                    // Store pixel's XYZ values
+                    x_values.push_back(pixels[kernel[i].first][kernel[i].second].x);
+                    y_values.push_back(pixels[kernel[i].first][kernel[i].second].y);
+                    z_values.push_back(pixels[kernel[i].first][kernel[i].second].z);
+                }
+            }
+
+            // Set current pixel's XYZ values to the median values of 9 by 3 kernel's XYZ values
+            pixels[row][col].x = findMedian(x_values);
+            pixels[row][col].y = findMedian(y_values);
+            pixels[row][col].z = findMedian(z_values);
+
+            x_values.clear();
+            y_values.clear();
+            z_values.clear();
+        }
     }
 }
 
@@ -634,12 +693,16 @@ int main() {
     readInData("absolute-path-to-x-values-file.csv", "absolute-path-to-y-values-file.csv", "absolute-path-to-z-values-file.csv", pixels, ground_slope, found_pixel_row, found_pixel_col);
 
 
+    // Perform median filtering on XYZ data
+    medianFilter(pixels, found_pixel_row, found_pixel_col);
+
+
     double theta = LIDAR_ANGLE - ground_slope;  // Angle in degrees by which ground reference frame must be rotated to be parallel with LiDAR reference frame (negative means tilted downwards and positive means tilted upwards)
 
 
     // Initialize variables to store pitch and roll angles
-    double pitch_angle;
-    double roll_angle;
+    double pitch_angle = 0;
+    double roll_angle = 0;
     
     
     Pixel pixel;  // The current pixel the for loop below is on
