@@ -277,7 +277,7 @@ double findMedian(std::vector<double> &kernel) {
 
 
 /**
- * Performs median filtering on pixels, using a 9 (width) by 3 (height) kernel to filter out noise
+ * Performs median filtering on pixels, using a 3 (height) by 9 (width) kernel to filter out noise
  * 
  * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel LiDAR image
  * @param found_pixel_row Row number of first pixel with a valid depth value that was found in readInData() function (median filtering starts from this pixel's row)
@@ -302,14 +302,14 @@ void medianFilter(std::vector<std::vector<Pixel>> &pixels, const int &found_pixe
                 continue;
             }
 
-            // Initialize 9 by 3 kernel
+            // Initialize 3 by 9 kernel (feel free to modify the kernel size as necessary)
             std::vector<std::pair<int, int>> kernel = {{row - 1, col - 4}, {row - 1, col - 3}, {row - 1, col - 2}, {row - 1, col - 1}, {row - 1, col}, {row - 1, col + 1}, {row - 1, col + 2}, {row - 1, col + 3}, {row - 1, col + 4}, 
             {row, col - 4}, {row, col - 3}, {row, col - 2}, {row, col - 1}, {row, col}, {row, col + 1}, {row, col + 2}, {row, col + 3}, {row, col + 4},
             {row + 1, col - 4}, {row + 1, col - 3}, {row + 1, col - 2}, {row + 1, col - 1}, {row + 1, col}, {row + 1, col + 1}, {row + 1, col + 2}, {row + 1, col + 3}, {row + 1, col + 4}};
 
-            // Loop through every pixel in 9 by 3 kernel, considering the pixel for median filtering calculation if it's in bounds and has a valid depth value
+            // Loop through every pixel in 3 by 9 kernel, considering the pixel for median filtering calculation if it's in bounds and has a valid depth value
             for(int i = 0; i < kernel.size(); i++)
-            {if(i == 0 || i == 8 || i == 9 || i == 17 || i == 18 || i == 26){continue;}
+            {
                 if(kernel[i].first >= 0 && kernel[i].first < 120 && kernel[i].second >= 0 && kernel[i].second < 160 && pixels[kernel[i].first][kernel[i].second].z != -1)
                 {
                     // Store pixel's XYZ values
@@ -319,7 +319,7 @@ void medianFilter(std::vector<std::vector<Pixel>> &pixels, const int &found_pixe
                 }
             }
 
-            // Set current pixel's XYZ values to the median values of 9 by 3 kernel's XYZ values
+            // Set current pixel's XYZ values to the median values of 3 by 9 kernel's XYZ values
             pixels[row][col].x = findMedian(x_values);
             pixels[row][col].y = findMedian(y_values);
             pixels[row][col].z = findMedian(z_values);
@@ -327,6 +327,76 @@ void medianFilter(std::vector<std::vector<Pixel>> &pixels, const int &found_pixe
             x_values.clear();
             y_values.clear();
             z_values.clear();
+        }
+    }
+}
+
+
+
+
+
+/**
+ * Performs Gaussian filtering on pixels (based on Euclidean distance between surrounding pixels and centre pixel), using a 3 (height) by 9 (width) kernel to filter out noise
+ * 
+ * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel LiDAR image
+ * @param found_pixel_row Row number of first pixel with a valid depth value that was found in readInData() function (median filtering starts from this pixel's row)
+ * @param found_pixel_col Column number of first pixel with a valid depth value that was found in readInData() function (median filtering starts from this pixel's column)
+ * @param sigma Standard deviation to use for Gaussian distribution
+ */
+void gaussianFilter(std::vector<std::vector<Pixel>> &pixels, const int &found_pixel_row, const int &found_pixel_col, const double &sigma)
+{   
+    // Loop through each row in 2D vector of Pixel objects, starting at row of first pixel with a valid depth value that was found
+    for(int row = found_pixel_row; row < 120; row++)
+    {
+        // Loop through each column in 2D vector of Pixel objects
+        for(int col = 0; col < 160; col++)
+        {
+            // Skip pixel if it has an invalid depth value
+            if(pixels[row][col].z == -1)
+            {
+                continue;
+            }
+
+            // Initialize 3 by 9 kernel (feel free to modify the kernel size as necessary)
+            std::vector<std::pair<int, int>> kernel = {{row - 1, col - 4}, {row - 1, col - 3}, {row - 1, col - 2}, {row - 1, col - 1}, {row - 1, col}, {row - 1, col + 1}, {row - 1, col + 2}, {row - 1, col + 3}, {row - 1, col + 4},
+            {row, col - 4}, {row, col - 3}, {row, col - 2}, {row, col - 1}, {row, col}, {row, col + 1}, {row, col + 2}, {row, col + 3}, {row, col + 4},
+            {row + 1, col - 4}, {row + 1, col - 3}, {row + 1, col - 2}, {row + 1, col - 1}, {row + 1, col}, {row + 1, col + 1}, {row + 1, col + 2}, {row + 1, col + 3}, {row + 1, col + 4}};
+
+            double sum_x = 0;
+            double sum_y = 0;
+            double sum_z = 0;
+            double sum_weight = 0;
+
+            // Loop through every pixel in 3 by 9 kernel, considering the pixel for filtering calculation if it's in bounds and has a valid depth value
+            for(int i = 0; i < kernel.size(); i++)
+            {
+                if(kernel[i].first >= 0 && kernel[i].first < 120 && kernel[i].second >= 0 && kernel[i].second < 160 && pixels[kernel[i].first][kernel[i].second].z != -1)
+                {
+                    // Calculate the distance between the current pixel and the pixel in the kernel
+                    double distance = sqrt(pow(pixels[row][col].x - pixels[kernel[i].first][kernel[i].second].x, 2) + pow(pixels[row][col].y - pixels[kernel[i].first][kernel[i].second].y, 2) + pow(pixels[row][col].z - pixels[kernel[i].first][kernel[i].second].z, 2));
+                    
+                    // Calculate the weight for the pixel in the kernel
+                    double weight = (1 / (sqrt(2 * M_PI) * sigma)) * exp(-(distance*distance)/(2*sigma*sigma));
+
+                    // Add weighted values of x, y, and z to the sum
+                    sum_x += pixels[kernel[i].first][kernel[i].second].x * weight;
+                    sum_y += pixels[kernel[i].first][kernel[i].second].y * weight;
+                    sum_z += pixels[kernel[i].first][kernel[i].second].z * weight;
+
+                    // Add weight to the sum of weights
+                    sum_weight += weight;
+                }
+            }
+
+            // Normalize the sum of weighted values by the sum of weights to get the filtered x, y, and z values
+            double filtered_x = sum_x / sum_weight;
+            double filtered_y = sum_y / sum_weight;
+            double filtered_z = sum_z / sum_weight;
+
+            // Set current pixel's x, y, and z values to the filtered values
+            pixels[row][col].x = filtered_x;
+            pixels[row][col].y = filtered_y;
+            pixels[row][col].z = filtered_z;
         }
     }
 }
@@ -695,6 +765,10 @@ int main() {
 
     // Perform median filtering on XYZ data
     medianFilter(pixels, found_pixel_row, found_pixel_col);
+    
+
+    // Perform Gaussian filtering on XYZ data
+    gaussianFilter(pixels, found_pixel_row, found_pixel_col, 100);  // Feel free to modify the standard deviation as necessary
 
 
     double theta = LIDAR_ANGLE - ground_slope;  // Angle in degrees by which ground reference frame must be rotated to be parallel with LiDAR reference frame (negative means tilted downwards and positive means tilted upwards)
@@ -710,9 +784,9 @@ int main() {
 
 
     // Iterate through pixels in the LiDAR image (stored in the 2D vector of pixel objects), coloring the corresponding pixels in the original black image as appropriate
-    for(int col = 0; col < 160; col++)
+    for(int col = 0; col < 159; col++)
     {
-        for(int row = 119; row >= 0; row--)
+        for(int row = 118; row >= 0; row--)
         {
             if(pixels[row][col].z != -1)  // Check if pixel has a valid depth value
             {   
