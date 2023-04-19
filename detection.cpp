@@ -336,7 +336,7 @@ void medianFilter(std::vector<std::vector<Pixel>> &pixels, const int &found_pixe
 
 
 /**
- * Performs Gaussian filtering on pixels (based on Euclidean distance between surrounding pixels and centre pixel), using a 3 (height) by 9 (width) kernel to filter out noise
+ * Performs Gaussian filtering on pixels (based on Euclidean distance between surrounding pixels and centre pixel in 3D space), using a 3 (height) by 9 (width) kernel to filter out noise
  * 
  * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel LiDAR image
  * @param found_pixel_row Row number of first pixel with a valid depth value that was found in readInData() function (median filtering starts from this pixel's row)
@@ -372,7 +372,7 @@ void gaussianFilter(std::vector<std::vector<Pixel>> &pixels, const int &found_pi
             {
                 if(kernel[i].first >= 0 && kernel[i].first < 120 && kernel[i].second >= 0 && kernel[i].second < 160 && pixels[kernel[i].first][kernel[i].second].z != -1)
                 {
-                    // Calculate the distance between the current pixel and the pixel in the kernel
+                    // Calculate the spatial distance (in 3D space) between the current pixel and the pixel in the kernel
                     double distance = sqrt(pow(pixels[row][col].x - pixels[kernel[i].first][kernel[i].second].x, 2) + pow(pixels[row][col].y - pixels[kernel[i].first][kernel[i].second].y, 2) + pow(pixels[row][col].z - pixels[kernel[i].first][kernel[i].second].z, 2));
                     
                     // Calculate the weight for the pixel in the kernel
@@ -388,6 +388,78 @@ void gaussianFilter(std::vector<std::vector<Pixel>> &pixels, const int &found_pi
                 }
             }
 
+            // Normalize the sum of weighted values by the sum of weights to get the filtered x, y, and z values
+            double filtered_x = sum_x / sum_weight;
+            double filtered_y = sum_y / sum_weight;
+            double filtered_z = sum_z / sum_weight;
+
+            // Set current pixel's x, y, and z values to the filtered values
+            pixels[row][col].x = filtered_x;
+            pixels[row][col].y = filtered_y;
+            pixels[row][col].z = filtered_z;
+        }
+    }
+}
+
+
+
+
+
+/**
+ * Performs bilateral filtering on pixels based on surrounding pixels' Euclidean proximity to centre pixel in both 2D pixel space and 3D space, using a 3 (height) by 9 (width) kernel to filter out noise
+ * 
+ * @param pixels 2D vector containing Pixel objects that represent each pixel in 160 by 120 pixel LiDAR image
+ * @param found_pixel_row Row number of first pixel with a valid depth value that was found in readInData() function (median filtering starts from this pixel's row)
+ * @param found_pixel_col Column number of first pixel with a valid depth value that was found in readInData() function (median filtering starts from this pixel's column)
+ * @param sigma_2D_space Standard deviation to use for Gaussian distribution in 2D spatial domain
+ * @param sigma_3D_space Standard deviation to use for Gaussian distribution in 3D spatial domain
+ */
+void bilateralFilter(std::vector<std::vector<Pixel>> &pixels, const int &found_pixel_row, const int &found_pixel_col, const double &sigma_2D_space, const double &sigma_3D_space)
+{   
+    // Loop through each row in 2D vector of Pixel objects, starting at row of first pixel with a valid depth value that was found
+    for(int row = found_pixel_row; row < 120; row++)
+    {
+        // Loop through each column in 2D vector of Pixel objects
+        for(int col = 0; col < 160; col++)
+        {
+            // Skip pixel if it has an invalid depth value
+            if(pixels[row][col].z == -1)
+            {
+                continue;
+            }
+
+            // Initialize 3 by 9 kernel (feel free to modify the kernel size as necessary)
+            std::vector<std::pair<int, int>> kernel = {{row - 1, col - 4}, {row - 1, col - 3}, {row - 1, col - 2}, {row - 1, col - 1}, {row - 1, col}, {row - 1, col + 1}, {row - 1, col + 2}, {row - 1, col + 3}, {row - 1, col + 4},
+            {row, col - 4}, {row, col - 3}, {row, col - 2}, {row, col - 1}, {row, col}, {row, col + 1}, {row, col + 2}, {row, col + 3}, {row, col + 4},
+            {row + 1, col - 4}, {row + 1, col - 3}, {row + 1, col - 2}, {row + 1, col - 1}, {row + 1, col}, {row + 1, col + 1}, {row + 1, col + 2}, {row + 1, col + 3}, {row + 1, col + 4}};
+
+            double sum_x = 0;
+            double sum_y = 0;
+            double sum_z = 0;
+            double sum_weight = 0;
+
+            // Loop through every pixel in 3 by 9 kernel, considering the pixel for filtering calculation if it's in bounds and has a valid depth value
+            for(int i = 0; i < kernel.size(); i++)
+            {
+                if(kernel[i].first >= 0 && kernel[i].first < 120 && kernel[i].second >= 0 && kernel[i].second < 160 && pixels[kernel[i].first][kernel[i].second].z != -1)
+                {
+                    // Calculate the spatial distance (in 2D pixel space) between the current pixel and the pixel in the kernel
+                    double distance_2D = sqrt(pow(row - kernel[i].first, 2) + pow(col - kernel[i].second, 2));
+
+                    // Calculate the spatial distance (in 3D space) between the current pixel and the pixel in the kernel
+                    double distance_3D = sqrt(pow(pixels[row][col].x - pixels[kernel[i].first][kernel[i].second].x, 2) + pow(pixels[row][col].y - pixels[kernel[i].first][kernel[i].second].y, 2) + pow(pixels[row][col].z - pixels[kernel[i].first][kernel[i].second].z, 2));
+
+                    // Calculate the weight for the pixel in the kernel based on the 2D and 3D spatial distances
+                    double weight = exp(-(distance_2D * distance_2D) / (2 * sigma_2D_space * sigma_2D_space) - (distance_3D * distance_3D) / (2 * sigma_3D_space * sigma_3D_space));
+
+                    // Accumulate the weighted sums
+                    sum_x += weight * pixels[kernel[i].first][kernel[i].second].x;
+                    sum_y += weight * pixels[kernel[i].first][kernel[i].second].y;
+                    sum_z += weight * pixels[kernel[i].first][kernel[i].second].z;
+                    sum_weight += weight;
+                }
+            }
+            
             // Normalize the sum of weighted values by the sum of weights to get the filtered x, y, and z values
             double filtered_x = sum_x / sum_weight;
             double filtered_y = sum_y / sum_weight;
@@ -769,6 +841,10 @@ int main() {
 
     // Perform Gaussian filtering on XYZ data
     gaussianFilter(pixels, found_pixel_row, found_pixel_col, 100);  // Feel free to modify the standard deviation as necessary
+
+
+    // Perform bilateral filtering on XYZ data
+    bilateralFilter(pixels, found_pixel_row, found_pixel_col, 4, 100);  // Feel free to modify the standard deviations as necessary
 
 
     double theta = LIDAR_ANGLE - ground_slope;  // Angle in degrees by which ground reference frame must be rotated to be parallel with LiDAR reference frame (negative means tilted downwards and positive means tilted upwards)
