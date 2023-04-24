@@ -1,5 +1,4 @@
-
-# README
+# Results
 
 In ***Scene 1 Real Image.jpg***, the makeshift ramp has a 30.4 degree 
 angle of inclination, the cardboard box and paper towel roll represent tall obstacles with near 90 degree angles of inclination, and the ball of socks represents a rock of height 85 mm.
