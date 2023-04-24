@@ -19,6 +19,9 @@ dist/
 # Build files
 build/
 
+# VS Code files
+.vscode/
+
 # Package files
 *.jar
 
