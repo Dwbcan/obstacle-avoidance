@@ -2,19 +2,13 @@
 
 Please refer to ***documentation.pdf*** file for in-depth algorithm explanation/documentation.
 
-## Windows
-Before running the code, please ensure that OpenCV and CMake is setup and configured properly. Please refer to this video for more information (https://www.youtube.com/watch?v=6nLfS6GWbXw).
+Before running the code, please ensure that the latest versions of OpenCV and CMake are installed and configured properly.
 
-Modify the paths in lines 835 and 931 in ***detection.cpp*** as appropriate.
+Modify the paths in lines 833 and 929 in ***detection.cpp*** as appropriate (absolute path means path relative to root directory of OS).
 
-Use the same instructions in the YouTube video to build and run the code.
+To build and run the code, enter the following commands:
 
-## Linux
-Before running the code, please ensure that the latest versions of OpenCV and CMake are installed. Comment out lines 3-23 in the ***CMakeLists.txt*** file and uncomment lines 31-36.
-
-Modify the paths in lines 835 and 931 in ***detection.cpp*** as appropriate.
-
-To build and run the code, navigate into the ***build*** directory and enter the following commands:
+```mkdir build && cd build```
 
 ```cmake ..```
 
