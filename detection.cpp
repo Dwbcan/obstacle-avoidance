@@ -4,12 +4,9 @@
 #include <string>
 #include <algorithm>
 #include <vector>
-
-
 #include <opencv2/opencv.hpp>
-#include "opencv2/highgui/highgui.hpp"
-#include <opencv2/imgproc.hpp>
-#include <opencv2/imgcodecs.hpp>
+
+
 
 
 
@@ -23,7 +20,7 @@
 #define MAX_PITCH           25.0          // Maximum rover pitch angle in degrees
 #define MAX_ROLL            35.0          // Maximum rover roll angle in degrees
 #define GROUND              100.0         // Maximum absolute value y distance (in mm) from ground to pixel, for pixel to be considered ground in obstacle detection algorithm
-#define SAFE                150.0         // Maximum height above ground (in mm) for pixel to be considered safe/traversible without worry (e.g. not-worrisome rock/obstacle)
+#define SAFE                150.0         // Maximum height above ground (in mm) for pixel to be considered safe/traversible without worry (e.g. non-worrisome rock/obstacle)
 
 #define LIDAR_ANGLE         0.0           // LiDAR's angle of inclination (relative to horizon) in degrees, where negative means tilted downwards and positive means tilted upwards
 #define OUTLIER             50.0          // Maximum absolute value height of pixel (in mm) from ground, to not be considered an outlier in ground plane estimation with linear regression
@@ -844,7 +841,7 @@ int main() {
 
 
     // Perform bilateral filtering on XYZ data
-    bilateralFilter(pixels, found_pixel_row, found_pixel_col, 4, 100);  // Feel free to modify the standard deviations as necessary
+    //bilateralFilter(pixels, found_pixel_row, found_pixel_col, 4, 100);  // Feel free to modify the standard deviations as necessary
 
 
     double theta = LIDAR_ANGLE - ground_slope;  // Angle in degrees by which ground reference frame must be rotated to be parallel with LiDAR reference frame (negative means tilted downwards and positive means tilted upwards)
@@ -918,6 +915,12 @@ int main() {
                     img.at<cv::Vec3b>(row, col) = YELLOW;  // Color the pixel yellow
                     pixels[row][col].color = "YELLOW";
                 }
+
+                // If the pixel is red or blue (meaning it's a dangerous obstacle or ditch/crevasse) and is within a rover length away from the LiDAR and falls within the rover's width, send a stop signal via cFS to stop the rover
+                if(pixels[row][col].z <= ROVER_LENGTH && abs(pixels[row][col].x) <= ROVER_WIDTH && (pixels[row][col].color == "RED" || pixels[row][col].color == "BLUE"))
+                {
+                    // Send stop signal via cFS to stop rover
+                }
             }
         }
     }
@@ -927,8 +930,8 @@ int main() {
     detectDitch(img, pixels, theta);
 
 
-    // Output final image to JPG file
-    cv::imwrite("C:/Users/Dew Bhaumik/Desktop/obstacle-avoidance/output.jpg", img);
+    // Output final image to JPG file (modify path as appropriate)
+    cv::imwrite("absolute-path-to-obstacle-avoidance-directory/output.jpg", img);
     
     return 0;
 }
