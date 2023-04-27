@@ -4,7 +4,8 @@
 #include <string>
 #include <algorithm>
 #include <vector>
-#include <opencv2/opencv.hpp>
+#include <opencv2/core.hpp>
+#include <opencv2/imgcodecs.hpp>
 
 
 
@@ -915,12 +916,6 @@ int main() {
                     img.at<cv::Vec3b>(row, col) = YELLOW;  // Color the pixel yellow
                     pixels[row][col].color = "YELLOW";
                 }
-
-                // If the pixel is red or blue (meaning it's a dangerous obstacle or ditch/crevasse) and is within a rover length away from the LiDAR and falls within the rover's width, send a stop signal via cFS to stop the rover
-                if(pixels[row][col].z <= ROVER_LENGTH && abs(pixels[row][col].x) <= ROVER_WIDTH && (pixels[row][col].color == "RED" || pixels[row][col].color == "BLUE"))
-                {
-                    // Send stop signal via cFS to stop rover
-                }
             }
         }
     }
@@ -932,6 +927,7 @@ int main() {
 
     // Output final image to JPG file (modify path as appropriate)
     cv::imwrite("absolute-path-to-obstacle-avoidance-directory/output.jpg", img);
+    
     
     return 0;
 }
